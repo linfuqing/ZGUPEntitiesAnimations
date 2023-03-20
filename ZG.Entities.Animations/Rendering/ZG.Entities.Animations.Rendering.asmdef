@@ -1,0 +1,28 @@
+{
+    "name": "ZG.Entities.Animations.Rendering",
+    "rootNamespace": "",
+    "references": [
+        "GUID:8a2eafa29b15f444eb6d74f94a930e1d",
+        "GUID:2665a8d13d1b3f18800f46e256720795",
+        "GUID:734d92eba21c94caba915361bd5ac177",
+        "GUID:e0cd26848372d4e5c891c569017e11f1",
+        "GUID:d8b63aba1907145bea998dd612889d6b",
+        "GUID:a5baed0c9693541a5bd947d336ec7659",
+        "GUID:442911fa060b2d148b430623121a113c",
+        "GUID:49f8af64274d04f318e9547deb9c498b",
+        "GUID:7a450cf7ca9694b5a8bfa3fd83ec635a",
+        "GUID:111b9f15fc71a104bb3dac19acd4ca86",
+        "GUID:d1080dc0d8432164aa6d65c2e12ef977",
+        "GUID:49ddd4d192d75a547bfde51e8a2eff3d",
+        "GUID:066ff3ec501668c49b0b5db9297457b7"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
