@@ -534,9 +534,10 @@ namespace ZG
                 var commands = this.commands[index];
                 var rigs = this.rigs[index];
                 DynamicBuffer<AnimatorControllerParameter> parameters;
-                int numCommands = commands.Length, parameterIndex, paramterLength, i, j;
+                StringHash name;
+                int parameterIndex, paramterLength, i, j;
                 bool isContains;
-                for(i = 0; i < numCommands; ++i)
+                for(i = commands.Length - 1; i >= 0; --i)
                 {
                     ref readonly var command = ref commands.ElementAt(i);
 
@@ -568,8 +569,19 @@ namespace ZG
 
                     if (isContains)
                     {
-                        commands.RemoveAtSwapBack(i--);
-                        --numCommands;
+                        name = command.name;
+
+                        commands.RemoveAt(i);
+
+                        for (j = i - 1; j >= 0; --j)
+                        {
+                            if (commands.ElementAt(j).name == name)
+                            {
+                                commands.RemoveAt(j);
+
+                                --i;
+                            }
+                        }
                     }
                 }
             }
