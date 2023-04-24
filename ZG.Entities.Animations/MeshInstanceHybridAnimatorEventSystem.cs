@@ -200,7 +200,7 @@ namespace ZG
         private BufferTypeHandle<MeshInstanceRig> __rigType;
         private ComponentTypeHandle<MeshInstanceAnimatorData> __instanceType;
         private ComponentTypeHandle<EntityObject<Transform>> __transformType;
-        private NativeCounterLite __counter;
+        private NativeCounter __counter;
 
         public SharedMultiHashMap<EntityObject<Transform>, AnimatorControllerEvent> events
         {
@@ -230,7 +230,7 @@ namespace ZG
             __instanceType = state.GetComponentTypeHandle<MeshInstanceAnimatorData>(true);
             __transformType = state.GetComponentTypeHandle<EntityObject<Transform>>(true);
 
-            __counter = new NativeCounterLite(Allocator.Persistent);
+            __counter = new NativeCounter(Allocator.Persistent);
 
             events = new SharedMultiHashMap<EntityObject<Transform>, AnimatorControllerEvent>(Allocator.Persistent);
         }
