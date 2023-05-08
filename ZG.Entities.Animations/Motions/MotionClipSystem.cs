@@ -266,7 +266,7 @@ namespace ZG
             [ReadOnly]
             public BufferAccessor<MotionClipInstance> clipInstances;
 
-            public NativeParallelHashMap<Key, Value> instances;
+            public NativeHashMap<Key, Value> instances;
 
             public void Execute(int index)
             {
@@ -292,7 +292,7 @@ namespace ZG
             [ReadOnly]
             public BufferTypeHandle<MotionClipInstance> clipInstanceType;
 
-            public NativeParallelHashMap<Key, Value> instances;
+            public NativeHashMap<Key, Value> instances;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
@@ -314,7 +314,7 @@ namespace ZG
             public BufferAccessor<MotionClip> clips;
             public BufferAccessor<MotionClipInstance> clipInstances;
 
-            public NativeParallelHashMap<Key, Value> instances;
+            public NativeHashMap<Key, Value> instances;
 
             public void Execute(int index)
             {
@@ -445,7 +445,7 @@ namespace ZG
             public BufferTypeHandle<MotionClip> clipType;
             public BufferTypeHandle<MotionClipInstance> clipInstanceType;
 
-            public NativeParallelHashMap<Key, Value> instances;
+            public NativeHashMap<Key, Value> instances;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
@@ -464,7 +464,7 @@ namespace ZG
         private EntityQuery __groupToDestroy;
         private EntityQuery __groupToCreate;
         private EntityQuery __groupToUpdate;
-        private NativeHashMapLite<Key, Value> __instances;
+        private NativeHashMap<Key, Value> __instances;
 
         public void OnCreate(ref SystemState state)
         {
@@ -483,12 +483,12 @@ namespace ZG
                 });
             __groupToUpdate.SetChangedVersionFilter(new ComponentType[] { typeof(Rig), typeof(MotionClip) });
 
-            __instances = new NativeHashMapLite<Key, Value>(1, Allocator.Persistent);
+            __instances = new NativeHashMap<Key, Value>(1, Allocator.Persistent);
         }
 
         public void OnDestroy(ref SystemState state)
         {
-            using (var values = ((NativeParallelHashMap<Key, Value>)__instances).GetValueArray(Allocator.Temp))
+            using (var values = __instances.GetValueArray(Allocator.Temp))
             {
                 int length = values.Length;
                 for (int i = 0; i < length; ++i)
@@ -536,7 +536,7 @@ namespace ZG
         }
 
         private static BlobAssetReference<ClipInstance> __Retain(
-            ref NativeParallelHashMap<Key, Value> instances,
+            ref NativeHashMap<Key, Value> instances,
             in BlobAssetReference<Clip> clip,
             in BlobAssetReference<RigDefinition> rigDefinition)
         {
@@ -573,7 +573,7 @@ namespace ZG
             return result;
         }
 
-        private static void __Release(ref NativeParallelHashMap<Key, Value> instances, int clipHashCode, int rigHashCode)
+        private static void __Release(ref NativeHashMap<Key, Value> instances, int clipHashCode, int rigHashCode)
         {
             Key key;
             key.clipHashCode = clipHashCode;
