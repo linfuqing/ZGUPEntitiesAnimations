@@ -68,7 +68,7 @@ namespace ZG
             public NativeArray<MeshInstanceHierarchyData> instances;
 
             [ReadOnly]
-            public NativeArray<EntityParent> entityParents;
+            public BufferAccessor<EntityParent> entityParents;
 
             [ReadOnly]
             public BufferAccessor<MeshInstanceNode> renderers;
@@ -95,10 +95,10 @@ namespace ZG
             public void Execute(int index)
             {
                 Entity parentEntity = Entity.Null;
-                if(!hasRig)
+                if (!hasRig && index >= entityParents.Length)
                 {
-                    parentEntity = index < entityParents.Length ? entityParents[index].entity : Entity.Null;
-                    if (!rigMap.HasBuffer(parentEntity))
+                    parentEntity = EntityParent.Get(entityParents[index], rigMap);
+                    if(parentEntity == Entity.Null)
                         return;
                 }
 
@@ -114,10 +114,12 @@ namespace ZG
                 }
                 else
                 {
-                    if (parentEntity == Entity.Null)
-                        parentEntity = index < entityParents.Length ? entityParents[index].entity : Entity.Null;
+                    if (index < entityParents.Length)
+                        parentEntity = EntityParent.Get(entityParents[index], rendererMap);
+                    else
+                        return;
 
-                    if (rendererBuilders.ContainsKey(parentEntity) || !rendererMap.HasBuffer(parentEntity))
+                    if (parentEntity == Entity.Null || rendererBuilders.ContainsKey(parentEntity))
                         return;
 
                     renderers = rendererMap[parentEntity];
@@ -128,8 +130,7 @@ namespace ZG
                     lods = this.lods[index];
                 else
                 {
-                    if (parentEntity == Entity.Null && index < entityParents.Length)
-                        parentEntity = entityParents[index].entity;
+                    parentEntity = index < entityParents.Length ? EntityParent.Get(entityParents[index], lodMap) : Entity.Null;
 
                     lods = lodMap.HasBuffer(parentEntity) ? lodMap[parentEntity] : default;
                 }
@@ -186,7 +187,7 @@ namespace ZG
             public ComponentTypeHandle<MeshInstanceHierarchyData> instanceType;
 
             [ReadOnly]
-            public ComponentTypeHandle<EntityParent> entityParentType;
+            public BufferTypeHandle<EntityParent> entityParentType;
 
             [ReadOnly]
             public BufferTypeHandle<MeshInstanceRig> rigType;
@@ -220,7 +221,7 @@ namespace ZG
                 collect.rendererBuilders = rendererBuilders;
                 collect.entityArray = chunk.GetNativeArray(entityType);
                 collect.instances = chunk.GetNativeArray(ref instanceType);
-                collect.entityParents = chunk.GetNativeArray(ref entityParentType);
+                collect.entityParents = chunk.GetBufferAccessor(ref entityParentType);
                 collect.renderers = chunk.GetBufferAccessor(ref rendererType);
                 collect.lods = chunk.GetBufferAccessor(ref lodType);
                 collect.lodMap = lods;
@@ -246,7 +247,7 @@ namespace ZG
             public ComponentLookup<MeshInstanceHierarchyData> instances;
 
             [ReadOnly]
-            public ComponentLookup<EntityParent> entityParents;
+            public BufferLookup<EntityParent> entityParents;
 
             [ReadOnly]
             public BufferLookup<MeshInstanceNode> renderers;
@@ -268,39 +269,19 @@ namespace ZG
 
             public void Execute(int index)
             {
-                Entity entity = entityArray[index], parentEntity = Entity.Null;
-                DynamicBuffer<MeshInstanceNode> renderers;
-                if (this.renderers.HasBuffer(entity))
-                    renderers = this.renderers[entity];
-                else
-                {
-                    parentEntity = entityParents[entity].entity;
+                Entity entity = entityArray[index], parentEntity = EntityParent.Get(entity, entityParents, this.nodes);
+                if (parentEntity == Entity.Null)
+                    return;
 
-                    renderers = this.renderers[parentEntity];
-                }
+                var nodes = this.nodes[parentEntity];
 
-                DynamicBuffer<MeshInstanceObject> lods;
-                if (this.lods.HasBuffer(entity))
-                    lods = this.lods[entity];
-                else
-                {
-                    if(parentEntity == Entity.Null && entityParents.HasComponent(entity))
-                        parentEntity = entityParents[entity].entity;
+                parentEntity = EntityParent.Get(entity, entityParents, this.renderers);
+                if (parentEntity == Entity.Null)
+                    return;
 
-                    lods = this.lods.HasBuffer(parentEntity) ? this.lods[parentEntity] : default;
-                }
+                var renderers = this.renderers[parentEntity];
 
-                //UnityEngine.Debug.Log($"Rig child {entity} : {this.rigs.HasComponent(entity)} or parent {parentEntity} : {this.rigs.HasComponent(parentEntity)}");
-                DynamicBuffer<MeshInstanceRigNode> nodes;
-                if (this.nodes.HasBuffer(entity))
-                    nodes = this.nodes[entity];
-                else
-                {
-                    if (parentEntity == Entity.Null)
-                        parentEntity = entityParents[entity].entity;
-
-                    nodes = this.nodes[parentEntity];
-                }
+                var lods = this.lods.HasBuffer(parentEntity) ? this.lods[parentEntity] : default;
 
                 Parent parent;
                 LocalToParent localToParent;
@@ -441,7 +422,7 @@ namespace ZG
                     collect.rendererBuilders = __rendererBuilders.reader;
                     collect.entityType = state.GetEntityTypeHandle();
                     collect.instanceType = state.GetComponentTypeHandle<MeshInstanceHierarchyData>(true);
-                    collect.entityParentType = state.GetComponentTypeHandle<EntityParent>(true);
+                    collect.entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
                     collect.rigType = state.GetBufferTypeHandle<MeshInstanceRig>(true);
                     collect.rendererType = state.GetBufferTypeHandle<MeshInstanceNode>(true);
                     collect.lodType = state.GetBufferTypeHandle<MeshInstanceObject>(true);
@@ -465,7 +446,7 @@ namespace ZG
                 Init init;
                 init.entityArray = entities;
                 init.instances = state.GetComponentLookup<MeshInstanceHierarchyData>(true);
-                init.entityParents = state.GetComponentLookup<EntityParent>(true);
+                init.entityParents = state.GetBufferLookup<EntityParent>(true);
                 init.renderers = state.GetBufferLookup<MeshInstanceNode>(true);
                 init.lods = state.GetBufferLookup<MeshInstanceObject>(true);
                 init.nodes = state.GetBufferLookup<MeshInstanceRigNode>(true);

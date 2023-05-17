@@ -346,7 +346,7 @@ namespace ZG
             public NativeArray<MeshInstanceHybridAnimationObjectData> instances;
 
             [ReadOnly]
-            public NativeArray<EntityParent> entityParents;
+            public BufferAccessor<EntityParent> entityParents;
 
             public BufferLookup<HybridAnimationObject> animationObjects;
 
@@ -355,7 +355,7 @@ namespace ZG
                 HybridAnimationObject animationObject;
                 animationObject.entity = entityArray[index];
 
-                Entity entity = index < entityParents.Length ? entityParents[index].entity : animationObject.entity;
+                Entity entity = index < entityParents.Length ? EntityParent.Get(entityParents[index], animationObjects) : animationObject.entity;
                 if (this.animationObjects.HasBuffer(entity))
                 {
                     var animationObjects = this.animationObjects[entity];
@@ -374,7 +374,7 @@ namespace ZG
             public ComponentTypeHandle<MeshInstanceHybridAnimationObjectData> instanceType;
 
             [ReadOnly]
-            public ComponentTypeHandle<EntityParent> entityParentType;
+            public BufferTypeHandle<EntityParent> entityParentType;
 
             public BufferLookup<HybridAnimationObject> animationObjects;
 
@@ -383,7 +383,7 @@ namespace ZG
                 SetObjects setObjects;
                 setObjects.entityArray = chunk.GetNativeArray(entityType);
                 setObjects.instances = chunk.GetNativeArray(ref instanceType);
-                setObjects.entityParents = chunk.GetNativeArray(ref entityParentType);
+                setObjects.entityParents = chunk.GetBufferAccessor(ref entityParentType);
                 setObjects.animationObjects = animationObjects;
 
                 var iterator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
@@ -432,7 +432,7 @@ namespace ZG
             SetObjectsEx setObjects;
             setObjects.entityType = state.GetEntityTypeHandle();
             setObjects.instanceType = state.GetComponentTypeHandle<MeshInstanceHybridAnimationObjectData>(true);
-            setObjects.entityParentType = state.GetComponentTypeHandle<EntityParent>(true);
+            setObjects.entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
             setObjects.animationObjects = state.GetBufferLookup<HybridAnimationObject>();
             state.Dependency = setObjects.Schedule(__animationGroup, jobHandle);
         }
@@ -489,7 +489,10 @@ namespace ZG
             public NativeArray<Entity> entityArray;
 
             [ReadOnly]
-            public ComponentLookup<EntityParent> entityParents;
+            public BufferLookup<EntityParent> entityParents;
+
+            [ReadOnly]
+            public ComponentLookup<MeshInstanceRigData> rigs;
 
             [ReadOnly]
             public ComponentLookup<MeshInstanceHybridAnimationObjectData> instances;
@@ -504,7 +507,7 @@ namespace ZG
                 var instance = instances[entity];
                 MeshInstanceHybridAnimationObjectInfo info;
                 info.parentChildIndex = instance.index;
-                info.parentEntity = entityParents.HasComponent(entity) ? entityParents[entity].entity : entity;
+                info.parentEntity = EntityParent.Get(entity, entityParents, rigs);
                 infos[entity] = info;
             }
         }
@@ -582,7 +585,8 @@ namespace ZG
 
             Create create;
             create.entityArray = entityArray;
-            create.entityParents = state.GetComponentLookup<EntityParent>(true);
+            create.entityParents = state.GetBufferLookup<EntityParent>(true);
+            create.rigs = state.GetComponentLookup<MeshInstanceRigData>(true);
             create.instances = state.GetComponentLookup<MeshInstanceHybridAnimationObjectData>(true);
             create.infos = state.GetComponentLookup<MeshInstanceHybridAnimationObjectInfo>();
 

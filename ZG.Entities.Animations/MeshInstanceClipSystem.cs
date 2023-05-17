@@ -151,9 +151,6 @@ namespace ZG
             public ComponentLookup<MotionClipData> clipDatas;
 
             [ReadOnly]
-            public NativeArray<EntityParent> entityParents;
-
-            [ReadOnly]
             public NativeArray<MeshInstanceMotionClipFactoryData> factories;
 
             [ReadOnly]
@@ -161,6 +158,9 @@ namespace ZG
 
             [ReadOnly]
             public NativeArray<MeshInstanceRigID> rigIDs;
+
+            [ReadOnly]
+            public BufferAccessor<EntityParent> entityParents;
 
             public UnsafeListEx<Entity> rigEntities;
 
@@ -173,6 +173,18 @@ namespace ZG
             public int Execute(int index)
             {
                 ref var factory = ref factories[index].definition.Value;
+
+                int rigInstanceID;
+                if (index < rigIDs.Length)
+                    rigInstanceID = rigIDs[index].value;
+                else
+                {
+                    Entity parentEntity = EntityParent.Get(entityParents[index], rigIDMap);
+                    if (parentEntity == Entity.Null)
+                        return factory.instanceID;
+
+                    rigInstanceID = rigIDMap[parentEntity].value;
+                }
 
                 /*if (prefabs.TryGetValue(factory.instanceID, out var prefab))
                 {
@@ -190,8 +202,6 @@ namespace ZG
 
                 MotionClipData motionClip;
                 motionClip.rootTransform = MotionClipTransform.Identity;
-
-                int rigInstanceID = index < rigIDs.Length ? rigIDs[index].value : rigIDMap[entityParents[index].entity].value;
 
                 ref var definition = ref instances[index].definition.Value;
                 ref var rigPrefab = ref rigPrefabs[rigInstanceID].Value;
@@ -276,9 +286,6 @@ namespace ZG
             public ComponentLookup<MotionClipData> clipDatas;
 
             [ReadOnly]
-            public ComponentTypeHandle<EntityParent> entityParentType;
-
-            [ReadOnly]
             public ComponentTypeHandle<MeshInstanceMotionClipFactoryData> factoryType;
 
             [ReadOnly]
@@ -286,6 +293,9 @@ namespace ZG
 
             [ReadOnly]
             public ComponentTypeHandle<MeshInstanceRigID> rigIDType;
+
+            [ReadOnly]
+            public BufferTypeHandle<EntityParent> entityParentType;
 
             [ReadOnly, DeallocateOnJobCompletion]
             public NativeArray<int> baseEntityIndexArray;
@@ -309,10 +319,10 @@ namespace ZG
                 collect.rigRemapTables = rigRemapTables;
                 collect.rigIDMap = rigIDs;
                 collect.clipDatas = clipDatas;
-                collect.entityParents = chunk.GetNativeArray(ref entityParentType);
                 collect.factories = chunk.GetNativeArray(ref factoryType);
                 collect.instances = chunk.GetNativeArray(ref instanceType);
                 collect.rigIDs = chunk.GetNativeArray(ref rigIDType);
+                collect.entityParents = chunk.GetBufferAccessor(ref entityParentType);
                 collect.rigEntities = rigEntities;
                 collect.motionClips = motionClips;
                 collect.defaultClips = defaultClips;
@@ -539,10 +549,10 @@ namespace ZG
                     collect.rigRemapTables = __rigRemapTables.reader;
                     collect.rigIDs = state.GetComponentLookup<MeshInstanceRigID>(true);
                     collect.clipDatas = state.GetComponentLookup<MotionClipData>(true);
-                    collect.entityParentType = state.GetComponentTypeHandle<EntityParent>(true);
                     collect.factoryType = state.GetComponentTypeHandle<MeshInstanceMotionClipFactoryData>(true);
                     collect.instanceType = state.GetComponentTypeHandle<MeshInstanceClipData>(true);
                     collect.rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
+                    collect.entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
                     collect.baseEntityIndexArray = __groupToCreate.CalculateBaseEntityIndexArray(Allocator.TempJob);
                     collect.ids = ids;
                     collect.rigEntities = rigEntities;

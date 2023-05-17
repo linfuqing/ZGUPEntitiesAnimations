@@ -132,10 +132,10 @@ namespace ZG
             public NativeArray<MeshInstanceRigID> rigIDs;
 
             [ReadOnly]
-            public NativeArray<EntityParent> entityParents;
+            public NativeArray<MeshInstanceAnimatorData> instances;
 
             [ReadOnly]
-            public NativeArray<MeshInstanceAnimatorData> instances;
+            public BufferAccessor<EntityParent> entityParents;
 
             public UnsafeListEx<Entity> weightMaskEntities;
 
@@ -147,6 +147,17 @@ namespace ZG
                 result.definition = instances[index].definition;
 
                 ref var definition = ref result.definition.Value;
+
+                if (index < rigIDs.Length)
+                    result.rigInstanceID = rigIDs[index].value;
+                else
+                {
+                    Entity parentEntity = EntityParent.Get(entityParents[index], rigIDMap);
+                    if (parentEntity == Entity.Null)
+                        return definition.instanceID;
+
+                    result.rigInstanceID = rigIDMap[parentEntity].value;
+                }
 
                 /*if (prefabs.TryGetValue(definition.instanceID, out var prefab))
                 {
@@ -162,8 +173,6 @@ namespace ZG
                 }*/
 
                 //��Rig���ر��ٴ�ʱ��Ҳ�����ã����Բ���ʹ��Prefab
-
-                result.rigInstanceID = index < rigIDs.Length ? rigIDs[index].value : rigIDMap[entityParents[index].entity].value;
 
                 ref var rigPrefab = ref rigPrefabs[result.rigInstanceID].Value;
 
@@ -212,10 +221,10 @@ namespace ZG
             public ComponentTypeHandle<MeshInstanceRigID> rigIDType;
 
             [ReadOnly]
-            public ComponentTypeHandle<EntityParent> entityParentType;
+            public ComponentTypeHandle<MeshInstanceAnimatorData> instanceType;
 
             [ReadOnly]
-            public ComponentTypeHandle<MeshInstanceAnimatorData> instanceType;
+            public BufferTypeHandle<EntityParent> entityParentType;
 
             [ReadOnly, DeallocateOnJobCompletion]
             public NativeArray<int> baseEntityIndexArray;
@@ -235,8 +244,8 @@ namespace ZG
                 collect.rigPrefabs = rigPrefabs;
                 collect.rigIDMap = rigIDs;
                 collect.rigIDs = chunk.GetNativeArray(ref rigIDType);
-                collect.entityParents = chunk.GetNativeArray(ref entityParentType);
                 collect.instances = chunk.GetNativeArray(ref instanceType);
+                collect.entityParents = chunk.GetBufferAccessor(ref entityParentType);
                 collect.weightMaskEntities = weightMaskEntities;
                 //collect.prefabs = prefabs;
                 collect.results = results;
@@ -471,9 +480,9 @@ namespace ZG
                     collect.rigPrefabs = __rigPrefabs.reader;
                     collect.rigIDs = state.GetComponentLookup<MeshInstanceRigID>(true);
                     collect.clips = state.GetComponentLookup<MotionClipData>(true);
-                    collect.entityParentType = state.GetComponentTypeHandle<EntityParent>(true);
                     collect.instanceType = state.GetComponentTypeHandle<MeshInstanceAnimatorData>(true);
-                    collect.rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true); 
+                    collect.rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
+                    collect.entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
                     collect.baseEntityIndexArray = __groupToCreate.CalculateBaseEntityIndexArray(Allocator.TempJob);
                     collect.ids = ids;
                     collect.weightMaskEntities = weightMaskEntities;

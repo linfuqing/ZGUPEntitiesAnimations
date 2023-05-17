@@ -231,13 +231,10 @@ namespace ZG
             public ComponentLookup<BlendShapeTag> blendShapeTags;*/
 
             [ReadOnly]
-            public ComponentLookup<MeshInstanceRigID> rigIDMaps;
+            public ComponentLookup<MeshInstanceRigID> rigIDMap;
 
             [ReadOnly]
             public NativeArray<Entity> entityArray;
-
-            [ReadOnly]
-            public NativeArray<EntityParent> entityParents;
 
             [ReadOnly]
             public NativeArray<MeshInstanceSkeletonData> instances;
@@ -250,6 +247,9 @@ namespace ZG
 
             [ReadOnly]
             public BufferAccessor<MeshInstanceNode> rendererInstances;
+
+            [ReadOnly]
+            public BufferAccessor<EntityParent> entityParents;
 
             [ReadOnly]
             public SharedHashMap<Entity, MeshInstanceRendererBuilder>.Reader rendererBuilders;
@@ -299,15 +299,13 @@ namespace ZG
                 }
                 else if (index < entityParents.Length)
                 {
-                    Entity entityParent = entityParents[index].entity;
-                    if (rigIDMaps.HasComponent(entityParent))
-                    {
-                        rigInstanceID = rigIDMaps[entityParent].value;
-
-                        rigInstances = this.rigInstances.HasBuffer(entityParent) ? this.rigInstances[entityParent] : default;
-                    }
-                    else
+                    Entity entityParent = EntityParent.Get(entityParents[index], rigIDMap);
+                    if (entityParent == Entity.Null)
                         return;
+
+                    rigInstanceID = rigIDMap[entityParent].value;
+
+                    rigInstances = this.rigInstances.HasBuffer(entityParent) ? this.rigInstances[entityParent] : default;
                 }
                 else
                     return;
@@ -491,9 +489,6 @@ namespace ZG
             public EntityTypeHandle entityType;
 
             [ReadOnly]
-            public ComponentTypeHandle<EntityParent> entityParentType;
-
-            [ReadOnly]
             public ComponentTypeHandle<MeshInstanceSkeletonData> instanceType;
 
             [ReadOnly]
@@ -504,6 +499,9 @@ namespace ZG
 
             [ReadOnly]
             public BufferTypeHandle<MeshInstanceNode> rendererInstanceType;
+
+            [ReadOnly]
+            public BufferTypeHandle<EntityParent> entityParentType;
 
             [ReadOnly]
             public SharedHashMap<Entity, MeshInstanceRendererBuilder>.Reader rendererBuilders;
@@ -541,13 +539,13 @@ namespace ZG
                 collectToCreate.deformedEntities = deformedEntities;
                 //collectToCreate.skinningTags = skinningTags;
                 //collectToCreate.blendShapeTags = blendShapeTags;
-                collectToCreate.rigIDMaps = rigIDs;
+                collectToCreate.rigIDMap = rigIDs;
                 collectToCreate.entityArray = chunk.GetNativeArray(entityType);
-                collectToCreate.entityParents = chunk.GetNativeArray(ref entityParentType);
                 collectToCreate.instances = chunk.GetNativeArray(ref instanceType);
                 collectToCreate.rigIDs = chunk.GetNativeArray(ref rigIDType);
                 collectToCreate.rendererIDs = chunk.GetNativeArray(ref rendererIDType);
                 collectToCreate.rendererInstances = chunk.GetBufferAccessor(ref rendererInstanceType);
+                collectToCreate.entityParents = chunk.GetBufferAccessor(ref entityParentType);
                 collectToCreate.rendererBuilders = rendererBuilders; 
                 collectToCreate.rendererPrefabBuilders = rendererPrefabBuilders;
                 collectToCreate.renderers = renderers;
@@ -931,7 +929,7 @@ namespace ZG
                     //collectToCreate.skinningTags = state.GetComponentLookup<SkinningTag>(true);
                     //collectToCreate.blendShapeTags = state.GetComponentLookup<BlendShapeTag>(true);
                     collectToCreate.rigIDs = state.GetComponentLookup<MeshInstanceRigID>(true);
-                    collectToCreate.entityParentType = state.GetComponentTypeHandle<EntityParent>(true);
+                    collectToCreate.entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
                     collectToCreate.instanceType = state.GetComponentTypeHandle<MeshInstanceSkeletonData>(true);
                     collectToCreate.rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
                     collectToCreate.rendererIDType = state.GetComponentTypeHandle<MeshInstanceRendererID>(true);
@@ -1144,9 +1142,6 @@ namespace ZG
             public NativeArray<Entity> entityArray;
 
             [ReadOnly]
-            public NativeArray<EntityParent> entityParents;
-
-            [ReadOnly]
             public NativeArray<MeshInstanceSkeletonData> instances;
 
             [ReadOnly]
@@ -1154,6 +1149,9 @@ namespace ZG
 
             [ReadOnly]
             public BufferAccessor<MeshInstanceRig> rigs;
+
+            [ReadOnly]
+            public BufferAccessor<EntityParent> entityParents;
 
             public NativeParallelMultiHashMap<int, Entity> entities;
 
@@ -1165,7 +1163,18 @@ namespace ZG
                 if (rendererBuilders.ContainsKey(entity))
                     return;
 
-                var rigs = index < this.rigs.Length ? this.rigs[index] : rigMap[entityParents[index].entity];
+                DynamicBuffer<MeshInstanceRig> rigs;
+                if (index < this.rigs.Length)
+                    rigs = this.rigs[index];
+                else
+                {
+                    var parentEntity = EntityParent.Get(entityParents[index], rigMap);
+                    if (parentEntity == Entity.Null)
+                        return;
+
+                    rigs = rigMap[parentEntity];
+                }
+
                 Entity rigEntity;
                 ref var definition = ref instances[index].definition.Value;
                 int numInstances = definition.instances.Length, rigCount;// rigBoneCount, boneCount;
@@ -1205,11 +1214,11 @@ namespace ZG
             [ReadOnly]
             public EntityTypeHandle entityType;
             [ReadOnly]
-            public ComponentTypeHandle<EntityParent> entityParentType;
-            [ReadOnly]
             public ComponentTypeHandle<MeshInstanceSkeletonData> instanceType;
             [ReadOnly]
             public ComponentTypeHandle<MeshInstanceSkeletonID> idType;
+            [ReadOnly]
+            public BufferTypeHandle<EntityParent> entityParentType;
             [ReadOnly]
             public BufferTypeHandle<MeshInstanceRig> rigType;
 
@@ -1224,10 +1233,10 @@ namespace ZG
                 collectToCreate.animatedLocalToRoots = animatedLocalToRoots;
                 collectToCreate.rendererBuilders = rendererBuilders;
                 collectToCreate.entityArray = chunk.GetNativeArray(entityType);
-                collectToCreate.entityParents = chunk.GetNativeArray(ref entityParentType);
                 collectToCreate.instances = chunk.GetNativeArray(ref instanceType);
                 collectToCreate.ids = chunk.GetNativeArray(ref idType);
                 collectToCreate.rigs = chunk.GetBufferAccessor(ref rigType);
+                collectToCreate.entityParents = chunk.GetBufferAccessor(ref entityParentType);
                 collectToCreate.entities = entities;
                 collectToCreate.rigCounts = rigCounts;
 
@@ -1268,7 +1277,7 @@ namespace ZG
             public NativeArray<Entity> entityArray;
 
             [ReadOnly]
-            public ComponentLookup<EntityParent> entityParents;
+            public BufferLookup<EntityParent> entityParents;
 
             //[ReadOnly]
             //public ComponentLookup<RigRootEntity> rigRootEntities;
@@ -1305,11 +1314,10 @@ namespace ZG
 
             public void Execute(int index)
             {
-                Entity entity = entityArray[index];
+                Entity entity = entityArray[index], rigRootEntity = EntityParent.Get(entity, entityParents, this.rigs);
 
                 var skeletons = this.skeletons[entity];
 
-                Entity rigRootEntity = this.rigs.HasBuffer(entity) ? entity : entityParents[entity].entity;
                 var rigs = this.rigs[rigRootEntity];
                 var nodes = this.nodes.HasBuffer(rigRootEntity) ? this.nodes[rigRootEntity] : default;
                 var renderers = this.renderers[entity];
@@ -1567,10 +1575,10 @@ namespace ZG
                     collectToCreate.animatedLocalToRoots = state.GetBufferLookup<AnimatedLocalToRoot>(true);
                     collectToCreate.rendererBuilders = __rendererBuilders.reader;
                     collectToCreate.entityType = state.GetEntityTypeHandle();
-                    collectToCreate.entityParentType = state.GetComponentTypeHandle<EntityParent>(true);
                     collectToCreate.instanceType = state.GetComponentTypeHandle<MeshInstanceSkeletonData>(true);
                     collectToCreate.idType = state.GetComponentTypeHandle<MeshInstanceSkeletonID>(true);
                     collectToCreate.rigType = state.GetBufferTypeHandle<MeshInstanceRig>(true);
+                    collectToCreate.entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
                     collectToCreate.entities = entities;
                     collectToCreate.rigCounts = rigCounts;
 
@@ -1649,7 +1657,7 @@ namespace ZG
 
                                 Init init;
                                 init.entityArray = entityArray;
-                                init.entityParents = state.GetComponentLookup<EntityParent>(true);
+                                init.entityParents = state.GetBufferLookup<EntityParent>(true);
                                 init.instances = state.GetComponentLookup<MeshInstanceSkeletonData>(true);
                                 init.skeletons = state.GetBufferLookup<MeshInstanceSkeleton>(true);
                                 init.rigs = state.GetBufferLookup<MeshInstanceRig>(true);
