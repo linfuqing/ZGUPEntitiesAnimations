@@ -162,11 +162,11 @@ namespace ZG
             [ReadOnly]
             public BufferAccessor<EntityParent> entityParents;
 
-            public UnsafeListEx<Entity> rigEntities;
+            public NativeList<Entity> rigEntities;
 
-            public UnsafeListEx<MotionClipData> motionClips;
+            public NativeList<MotionClipData> motionClips;
 
-            public UnsafeListEx<DefaultClip> defaultClips;
+            public NativeList<DefaultClip> defaultClips;
 
             //public SharedHashMap<int, Prefab>.Writer prefabs;
 
@@ -217,7 +217,7 @@ namespace ZG
                     if (clipDatas.HasComponent(entity))
                         continue;
 
-                    numRigEntities = rigEntities.length;
+                    numRigEntities = rigEntities.Length;
                     for (j = 0; j < numRigEntities; ++j)
                     {
                         if (rigEntities.ElementAt(j) == entity)
@@ -302,11 +302,11 @@ namespace ZG
 
             public NativeArray<MeshInstanceMotionClipID> ids;
 
-            public UnsafeListEx<Entity> rigEntities;
+            public NativeList<Entity> rigEntities;
 
-            public UnsafeListEx<MotionClipData> motionClips;
+            public NativeList<MotionClipData> motionClips;
 
-            public UnsafeListEx<DefaultClip> defaultClips;
+            public NativeList<DefaultClip> defaultClips;
 
             //public SharedHashMap<int, Prefab>.Writer prefabs;
 
@@ -345,7 +345,7 @@ namespace ZG
             public double time;
 
             [ReadOnly]
-            public UnsafeListEx<DefaultClip> defaultClips;
+            public NativeList<DefaultClip> defaultClips;
 
             [NativeDisableParallelForRestriction]
             public BufferLookup<MotionClip> motionClips;
@@ -381,10 +381,10 @@ namespace ZG
         private struct CopyClips : IJobParallelFor
         {
             [ReadOnly]
-            public UnsafeListEx<Entity> entityArray;
+            public NativeList<Entity> entityArray;
 
             [ReadOnly]
-            public UnsafeListEx<MotionClipData> source;
+            public NativeList<MotionClipData> source;
 
             [NativeDisableParallelForRestriction]
             public ComponentLookup<MotionClipData> destination;
@@ -392,32 +392,6 @@ namespace ZG
             public void Execute(int index)
             {
                 destination[entityArray[index]] = source[index];
-            }
-        }
-
-        [BurstCompile]
-        private struct DisposeClips : IJob
-        {
-            public UnsafeListEx<Entity> entities;
-
-            public UnsafeListEx<MotionClipData> values;
-
-            public void Execute()
-            {
-                entities.Dispose();
-
-                values.Dispose();
-            }
-        }
-
-        [BurstCompile]
-        private struct DisposeAll : IJob
-        {
-            public UnsafeListEx<DefaultClip> defaultClips;
-
-            public void Execute()
-            {
-                defaultClips.Dispose();
             }
         }
 
@@ -442,8 +416,6 @@ namespace ZG
         {
             BurstUtility.InitializeJobParallelFor<Play>();
             BurstUtility.InitializeJobParallelFor<CopyClips>();
-            BurstUtility.InitializeJob<DisposeClips>();
-            BurstUtility.InitializeJob<DisposeAll>();
 
             __rigComponentTypes = new ComponentTypeSet(
                 ComponentType.ReadOnly<MotionClipData>(), 
@@ -532,9 +504,9 @@ namespace ZG
             {
                 JobHandle inputDeps = state.Dependency;
 
-                var defaultClips = new UnsafeListEx<DefaultClip>(Allocator.TempJob);
-                var motionClips = new UnsafeListEx<MotionClipData>(Allocator.TempJob);
-                var rigEntities = new UnsafeListEx<Entity>(Allocator.TempJob);
+                var defaultClips = new NativeList<DefaultClip>(Allocator.TempJob);
+                var motionClips = new NativeList<MotionClipData>(Allocator.TempJob);
+                var rigEntities = new NativeList<Entity>(Allocator.TempJob);
 
                 using (var ids = new NativeArray<MeshInstanceMotionClipID>(entityCount, Allocator.TempJob))
                 {
@@ -562,10 +534,10 @@ namespace ZG
 
                     collect.Run(__groupToCreate);
 
-                    entityManager.AddComponentDataBurstCompatible(__groupToCreate, ids);
+                    entityManager.AddComponentData(__groupToCreate, ids);
                 }
 
-                int numRigEntities = rigEntities.length;
+                int numRigEntities = rigEntities.Length;
                 for (int i = 0; i < numRigEntities; ++i)
                     entityManager.AddComponent(rigEntities[i], __rigComponentTypes);
 
@@ -573,12 +545,9 @@ namespace ZG
                 copyClips.entityArray = rigEntities;
                 copyClips.source = motionClips;
                 copyClips.destination = state.GetComponentLookup<MotionClipData>();
-                var jobHandle = copyClips.Schedule(rigEntities.length, InnerloopBatchCount, inputDeps);
+                var jobHandle = copyClips.Schedule(rigEntities.Length, InnerloopBatchCount, inputDeps);
 
-                DisposeClips disposeClips;
-                disposeClips.entities = rigEntities;
-                disposeClips.values = motionClips;
-                jobHandle = disposeClips.Schedule(jobHandle);
+                jobHandle = JobHandle.CombineDependencies(rigEntities.Dispose(jobHandle), motionClips.Dispose(jobHandle));
 
                 Play play;
                 play.time = state.WorldUnmanaged.Time.ElapsedTime;
@@ -588,12 +557,9 @@ namespace ZG
                 play.motionClipWeights = state.GetBufferLookup<MotionClipWeight>();
                 play.motionClipWeightSteps = state.GetBufferLookup<MotionClipWeightStep>();
 
-                jobHandle = JobHandle.CombineDependencies(jobHandle, play.Schedule(defaultClips.length, InnerloopBatchCount, inputDeps));
+                jobHandle = JobHandle.CombineDependencies(jobHandle, play.ScheduleByRef(defaultClips.Length, InnerloopBatchCount, inputDeps));
 
-                DisposeAll disposeAll;
-                disposeAll.defaultClips = defaultClips;
-
-                state.Dependency = disposeAll.Schedule(jobHandle);
+                state.Dependency = defaultClips.Dispose(jobHandle);
             }
         }
     }

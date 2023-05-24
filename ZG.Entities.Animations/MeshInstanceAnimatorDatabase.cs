@@ -697,6 +697,13 @@ namespace ZG
             return __controllerDefinitions[index];
         }
 
+        public BlobAssetReference<Unity.Animation.Clip> GetClip(int index)
+        {
+            __InitClips();
+
+            return __clips[index];
+        }
+
         protected override void _Dispose()
         {
             if (__definition.IsCreated)

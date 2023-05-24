@@ -454,389 +454,145 @@ namespace ZG
             public int index;
 
             public BlobArray<int> remapIndices;
-        }
 
-        public struct Motion
-        {
-            public AnimatorControllerMotionType type;
-
-            public int index;
-
-            public BlobArray<int> childIndices;
-
-            public static float GetTime(float time, float speed, float duration)
-            {
-                return Math.Repeat((speed < 0.0f ? duration - time : time) * speed, duration);
-            }
-
-            public static void Evaluate(
-                int index, 
-                int rigIndex, 
-                int instanceID,
+            public void Evaluate(
+                int rigIndex,
                 int rigInstanceID,
+                int instanceID,
                 int layerIndex,
-                int depth, 
+                int depth,
+                float weight,
                 float speed,
                 float previousTime,
                 float currentTime,
-                float weight, 
-                in DynamicBuffer<AnimatorControllerParameter> parameterValues, 
-                in SingletonAssetContainer<UnsafeUntypedBlobAssetReference>.Reader motions,
                 in SingletonAssetContainer<BlobAssetReference<Unity.Animation.Clip>>.Reader clips,
                 in SingletonAssetContainer<BlobAssetReference<RigDefinition>>.Reader rigDefinitions,
                 in SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.Reader rigRemapTables,
                 ref BlobArray<Remap> remaps,
-                ref BlobArray<Clip> clipKeys,
-                ref BlobArray<Motion> motionKeys, 
-                ref BlobArray<Parameter> parameterKeys,
                 ref DynamicBuffer<MotionClip> outClips,
                 ref DynamicBuffer<MotionClipWeight> outWeights,
                 ref DynamicBuffer<MotionClipTime> outTimes,
                 ref DynamicBuffer<AnimatorControllerEvent> outEvents)
             {
-                if (index == -1)
-                    return;
-
-                if (weight > math.FLT_MIN_NORMAL)
+                var clipInstance = clips[new SingletonAssetContainerHandle(instanceID, index)];
+                if (!clipInstance.IsCreated)
                 {
-                    ref var motion = ref motionKeys[index];
+                    Debug.LogError("clipInstance has not been created");
 
-                    switch (motion.type)
+                    return;
+                }
+
+                ref var clipValue = ref clipInstance.Value;
+                float time;
+                MotionClipWrapMode wrapMode;
+                switch (this.wrapMode)
+                {
+                    case MotionClipWrapMode.Normal:
+                        if (math.abs(currentTime) > clipValue.Duration)
+                        {
+                            wrapMode = MotionClipWrapMode.Normal;
+
+                            time = currentTime < 0.0f ? 0.0f : clipValue.Duration;
+                        }
+                        else
+                        {
+                            wrapMode = MotionClipWrapMode.Managed;
+
+                            time = currentTime < 0.0f ? currentTime + clipValue.Duration : currentTime;
+                        }
+                        break;
+                    case MotionClipWrapMode.Loop:
+                        wrapMode = MotionClipWrapMode.Managed;
+
+                        time = Math.Repeat(/*speed < 0.0f ? motion.averageLength - currentTime : */currentTime, clipValue.Duration);
+                        break;
+                    default:
+                        wrapMode = MotionClipWrapMode.Normal;
+
+                        time = currentTime;
+                        break;
+                }
+
+                int remapIndex = -1, clipRemapIndex, numClipRemapIndices = remapIndices.Length;
+                for (int i = 0; i < numClipRemapIndices; ++i)
+                {
+                    clipRemapIndex = remapIndices[i];
+                    ref var remap = ref remaps[clipRemapIndex];
+                    if (remap.destinationRigIndex == rigIndex)
                     {
-                        case AnimatorControllerMotionType.None:
-                            ref var clip = ref clipKeys[motion.index];
-                            var clipInstance = clips[new SingletonAssetContainerHandle(instanceID, clip.index)];
-                            if (!clipInstance.IsCreated)
-                            {
-                                Debug.LogError("clipInstance has not been created");
+                        remapIndex = clipRemapIndex;
 
-                                return;
-                            }
-
-                            ref var clipValue = ref clipInstance.Value;
-                            float time;
-                            MotionClipWrapMode wrapMode;
-                            switch (clip.wrapMode)
-                            {
-                                case MotionClipWrapMode.Normal:
-                                    if (math.abs(currentTime) > clipValue.Duration)
-                                    {
-                                        wrapMode = MotionClipWrapMode.Normal;
-
-                                        time = currentTime < 0.0f ? 0.0f : clipValue.Duration;
-                                    }
-                                    else
-                                    {
-                                        wrapMode = MotionClipWrapMode.Managed;
-
-                                        time = currentTime < 0.0f ? currentTime + clipValue.Duration : currentTime;
-                                    }
-                                    break;
-                                case MotionClipWrapMode.Loop:
-                                    wrapMode = MotionClipWrapMode.Managed;
-
-                                    time = Math.Repeat(/*speed < 0.0f ? motion.averageLength - currentTime : */currentTime, clipValue.Duration);
-                                    break;
-                                default:
-                                    wrapMode = MotionClipWrapMode.Normal;
-
-                                    time = currentTime;
-                                    break;
-                            }
-
-                            int remapIndex = -1, clipRemapIndex, numClipRemapIndices = clip.remapIndices.Length;
-                            for(int i = 0; i < numClipRemapIndices; ++i)
-                            {
-                                clipRemapIndex = clip.remapIndices[i];
-                                ref var remap = ref remaps[clipRemapIndex];
-                                if (remap.destinationRigIndex == rigIndex)
-                                {
-                                    remapIndex = clipRemapIndex;
-
-                                    break;
-                                }
-                            }
-
-                            __Evaluate(
-                                clip.flag,
-                                wrapMode, 
-                                instanceID,
-                                rigInstanceID,
-                                remapIndex,
-                                layerIndex,
-                                depth,
-                                speed,
-                                time,
-                                weight,
-                                clipInstance,
-                                rigDefinitions,
-                                rigRemapTables,
-                                ref outClips,
-                                ref outWeights,
-                                ref outTimes,
-                                ref remaps);
-
-                            ref var synchronizationTags = ref clipValue.SynchronizationTags;
-                            int numSynchronizationTags = synchronizationTags.Length;
-                            if (numSynchronizationTags > 0)
-                            {
-                                float normalizedPreviousTime = previousTime / clipValue.Duration, 
-                                    normalizedCurrentTime = currentTime / clipValue.Duration;
-                                switch(clip.wrapMode)
-                                {
-                                    case MotionClipWrapMode.Normal:
-                                        normalizedPreviousTime = math.clamp(normalizedPreviousTime, -1.0f, 1.0f);
-                                        normalizedCurrentTime = math.clamp(normalizedCurrentTime, -1.0f, 1.0f);
-
-                                        Repeat(ref normalizedPreviousTime, ref normalizedCurrentTime);
-                                        break;
-                                    case MotionClipWrapMode.Loop:
-                                        Repeat(ref normalizedPreviousTime, ref normalizedCurrentTime);
-
-                                        break;
-                                }
-
-                                if (normalizedPreviousTime != normalizedCurrentTime)
-                                {
-                                    AnimatorControllerEvent outEvent;
-                                    for (int i = 0; i < numSynchronizationTags; ++i)
-                                    {
-                                        ref var synchronizationTag = ref clipValue.SynchronizationTags[i];
-                                        if (Overlaps(normalizedPreviousTime, normalizedCurrentTime, synchronizationTag.NormalizedTime))
-                                        {
-                                            outEvent.type = synchronizationTag.Type;
-                                            outEvent.state = synchronizationTag.State;
-                                            outEvent.weight = weight;
-
-                                            outEvents.Add(outEvent);
-                                        }
-                                    }
-                                }
-                            }
-
-                            break;
-                        case AnimatorControllerMotionType.Simple1D:
-                            {
-                                __Evaluate(
-                                    0,
-                                    MotionClipWrapMode.Managed, 
-                                    instanceID,
-                                    rigInstanceID,
-                                    -1,
-                                    layerIndex,
-                                    depth,
-                                    speed,
-                                    currentTime,
-                                    weight,
-                                    BlobAssetReference<Unity.Animation.Clip>.Null,
-                                    rigDefinitions,
-                                    rigRemapTables,
-                                    ref outClips,
-                                    ref outWeights,
-                                    ref outTimes,
-                                    ref remaps);
-
-                                ref var blendTree = ref motions[new SingletonAssetContainerHandle(instanceID, motion.index)].Reinterpret<AnimatorControllerBlendTree1DSimple>().Value;
-                                int numWeights = motion.childIndices.Length;
-                                var weights = new NativeArray<float>(numWeights, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-
-                                int paramterIndex = Parameter.IndexOf(blendTree.blendParameter, ref parameterKeys);
-
-                                AnimatorControllerBlendTree1DSimple.ComputeWeights(
-                                    blendTree.motionThresholds.AsArray(),
-                                    paramterIndex == -1 ? 0.0f : parameterKeys[paramterIndex].GetFloat(paramterIndex, parameterValues),
-                                    ref weights);
-
-                                ++depth;
-
-                                float motionSpeed;
-                                for (int i = 0; i < numWeights; ++i)
-                                {
-                                    motionSpeed = blendTree.motionSpeeds[i];
-
-                                    Evaluate(
-                                        motion.childIndices[i],
-                                        rigIndex, 
-                                        instanceID,
-                                        rigInstanceID,
-                                        layerIndex,
-                                        depth,
-                                        speed * motionSpeed,
-                                        previousTime * motionSpeed, 
-                                        currentTime * motionSpeed,
-                                        weights[i], // * weight,
-                                        parameterValues,
-                                        motions,
-                                        clips,
-                                        rigDefinitions,
-                                        rigRemapTables,
-                                        ref remaps,
-                                        ref clipKeys,
-                                        ref motionKeys,
-                                        ref parameterKeys, 
-                                        ref outClips,
-                                        ref outWeights,
-                                        ref outTimes,
-                                        ref outEvents);
-                                }
-
-                                weights.Dispose();
-                            }
-                            break;
-                        case AnimatorControllerMotionType.SimpleDirectional2D:
-                            {
-                                __Evaluate(
-                                       0,
-                                       MotionClipWrapMode.Managed, 
-                                       instanceID,
-                                       rigInstanceID,
-                                       -1,
-                                       layerIndex,
-                                       depth,
-                                       speed,
-                                       currentTime,
-                                       weight,
-                                       BlobAssetReference<Unity.Animation.Clip>.Null,
-                                       rigDefinitions,
-                                       rigRemapTables,
-                                       ref outClips,
-                                       ref outWeights,
-                                       ref outTimes,
-                                       ref remaps);
-
-                                ref var blendTree = ref motions[new SingletonAssetContainerHandle(instanceID, motion.index)].Reinterpret<AnimatorControllerBlendTree2DSimpleDirectional>().Value;
-                                int numWeights = blendTree.motionPositions.Length;
-                                var weights = new NativeArray<float>(numWeights, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-
-                                int paramterIndexX = Parameter.IndexOf(blendTree.blendParameterX, ref parameterKeys),
-                                    paramterIndexY = Parameter.IndexOf(blendTree.blendParameterY, ref parameterKeys);
-
-                                AnimatorControllerBlendTree2DSimpleDirectional.ComputeWeights(
-                                    blendTree.motionPositions.AsArray(),
-                                    math.float2(
-                                        paramterIndexX == -1 ? 0.0f : parameterKeys[paramterIndexX].GetFloat(paramterIndexX, parameterValues),
-                                        paramterIndexY == -1 ? 0.0f : parameterKeys[paramterIndexY].GetFloat(paramterIndexY, parameterValues)),
-                                    ref weights);
-
-                                ++depth;
-
-                                float motionSpeed;
-                                for (int i = 0; i < numWeights; ++i)
-                                {
-                                    motionSpeed = blendTree.motionSpeeds[i];
-
-                                    Evaluate(
-                                        motion.childIndices[i],
-                                        rigIndex, 
-                                        instanceID,
-                                        rigInstanceID,
-                                        layerIndex,
-                                        depth,
-                                        speed * motionSpeed,
-                                        previousTime * motionSpeed, 
-                                        currentTime * motionSpeed,
-                                        weights[i], // * weight,
-                                        parameterValues,
-                                        motions,
-                                        clips,
-                                        rigDefinitions,
-                                        rigRemapTables,
-                                        ref remaps,
-                                        ref clipKeys,
-                                        ref motionKeys,
-                                        ref parameterKeys,
-                                        ref outClips,
-                                        ref outWeights,
-                                        ref outTimes,
-                                        ref outEvents);
-                                }
-
-                                weights.Dispose();
-                            }
-                            break;
-                        case AnimatorControllerMotionType.FreeformCartesian2D:
-                            {
-                                __Evaluate(
-                                       0,
-                                       MotionClipWrapMode.Managed, 
-                                       instanceID,
-                                       rigInstanceID,
-                                       -1,
-                                       layerIndex,
-                                       depth,
-                                       speed,
-                                       currentTime,
-                                       weight,
-                                       BlobAssetReference<Unity.Animation.Clip>.Null,
-                                       rigDefinitions,
-                                       rigRemapTables,
-                                       ref outClips,
-                                       ref outWeights,
-                                       ref outTimes,
-                                       ref remaps);
-
-                                ref var blendTree = ref motions[new SingletonAssetContainerHandle(instanceID, motion.index)].Reinterpret<AnimatorControllerBlendTree2DFreeformCartesian>().Value;
-                                int numWeights = blendTree.motionPositions.Length;
-                                var weights = new NativeArray<float>(numWeights, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-
-                                int paramterIndexX = Parameter.IndexOf(blendTree.blendParameterX, ref parameterKeys),
-                                    paramterIndexY = Parameter.IndexOf(blendTree.blendParameterY, ref parameterKeys);
-
-                                AnimatorControllerBlendTree2DFreeformCartesian.ComputeWeights(
-                                    blendTree.motionPositions.AsArray(),
-                                    math.float2(
-                                        paramterIndexX == -1 ? 0.0f : parameterKeys[paramterIndexX].GetFloat(paramterIndexX, parameterValues),
-                                        paramterIndexY == -1 ? 0.0f : parameterKeys[paramterIndexY].GetFloat(paramterIndexY, parameterValues)),
-                                    ref weights);
-
-                                ++depth;
-
-                                float motionSpeed;
-                                for (int i = 0; i < numWeights; ++i)
-                                {
-                                    motionSpeed = blendTree.motionSpeeds[i];
-
-                                    Evaluate(
-                                        motion.childIndices[i],
-                                        rigIndex,
-                                        instanceID,
-                                        rigInstanceID,
-                                        layerIndex,
-                                        depth,
-                                        speed * motionSpeed,
-                                        previousTime * motionSpeed,
-                                        currentTime * motionSpeed,
-                                        weights[i], // * weight,
-                                        parameterValues,
-                                        motions,
-                                        clips,
-                                        rigDefinitions,
-                                        rigRemapTables,
-                                        ref remaps,
-                                        ref clipKeys,
-                                        ref motionKeys,
-                                        ref parameterKeys,
-                                        ref outClips,
-                                        ref outWeights,
-                                        ref outTimes,
-                                        ref outEvents);
-                                }
-
-                                weights.Dispose();
-                            }
-                            break;
+                        break;
                     }
                 }
+
+                Evaluate(
+                    flag,
+                    wrapMode,
+                    instanceID,
+                    rigInstanceID,
+                    remapIndex,
+                    layerIndex,
+                    depth,
+                    speed,
+                    time,
+                    weight,
+                    clipInstance,
+                    rigDefinitions,
+                    rigRemapTables,
+                    ref outClips,
+                    ref outWeights,
+                    ref outTimes,
+                    ref remaps);
+
+                ref var synchronizationTags = ref clipValue.SynchronizationTags;
+                int numSynchronizationTags = synchronizationTags.Length;
+                if (numSynchronizationTags > 0)
+                {
+                    float normalizedPreviousTime = previousTime / clipValue.Duration,
+                        normalizedCurrentTime = currentTime / clipValue.Duration;
+                    switch (wrapMode)
+                    {
+                        case MotionClipWrapMode.Normal:
+                            normalizedPreviousTime = math.clamp(normalizedPreviousTime, -1.0f, 1.0f);
+                            normalizedCurrentTime = math.clamp(normalizedCurrentTime, -1.0f, 1.0f);
+
+                            Repeat(ref normalizedPreviousTime, ref normalizedCurrentTime);
+                            break;
+                        case MotionClipWrapMode.Loop:
+                            Repeat(ref normalizedPreviousTime, ref normalizedCurrentTime);
+
+                            break;
+                    }
+
+                    if (normalizedPreviousTime != normalizedCurrentTime)
+                    {
+                        AnimatorControllerEvent outEvent;
+                        for (int i = 0; i < numSynchronizationTags; ++i)
+                        {
+                            ref var synchronizationTag = ref clipValue.SynchronizationTags[i];
+                            if (Overlaps(normalizedPreviousTime, normalizedCurrentTime, synchronizationTag.NormalizedTime))
+                            {
+                                outEvent.type = synchronizationTag.Type;
+                                outEvent.state = synchronizationTag.State;
+                                outEvent.weight = weight;
+
+                                outEvents.Add(outEvent);
+                            }
+                        }
+                    }
+                }
+
             }
 
-            public static void __Evaluate(
+            public static void Evaluate(
                 MotionClipFlag flag,
-                MotionClipWrapMode wrapMode, 
+                MotionClipWrapMode wrapMode,
                 int instanceID,
                 int rigInstanceID,
-                int remapIndex, 
-                int layerIndex, 
-                int depth, 
+                int remapIndex,
+                int layerIndex,
+                int depth,
                 float speed,
                 float time,
                 float weight,
@@ -891,6 +647,346 @@ namespace ZG
                     UnityEngine.Debug.Log($"Animator {outClips.Length} : {outTimes.Length} : {outWeights.Length}");*/
 
             }
+        }
+
+        public struct Motion
+        {
+            public AnimatorControllerMotionType type;
+
+            public int index;
+
+            public BlobArray<int> childIndices;
+
+            public static float GetTime(float time, float speed, float duration)
+            {
+                return Math.Repeat((speed < 0.0f ? duration - time : time) * speed, duration);
+            }
+
+            public static void Evaluate(
+                int index, 
+                int rigIndex,
+                int rigInstanceID,
+                int instanceID,
+                int layerIndex,
+                int depth, 
+                float speed,
+                float previousTime,
+                float currentTime,
+                float weight, 
+                in DynamicBuffer<AnimatorControllerParameter> parameterValues, 
+                in SingletonAssetContainer<UnsafeUntypedBlobAssetReference>.Reader motions,
+                in SingletonAssetContainer<BlobAssetReference<Unity.Animation.Clip>>.Reader clips,
+                in SingletonAssetContainer<BlobAssetReference<RigDefinition>>.Reader rigDefinitions,
+                in SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.Reader rigRemapTables,
+                ref BlobArray<Remap> remaps,
+                ref BlobArray<Clip> clipKeys,
+                ref BlobArray<Motion> motionKeys, 
+                ref BlobArray<Parameter> parameterKeys,
+                ref DynamicBuffer<MotionClip> outClips,
+                ref DynamicBuffer<MotionClipWeight> outWeights,
+                ref DynamicBuffer<MotionClipTime> outTimes,
+                ref DynamicBuffer<AnimatorControllerEvent> outEvents)
+            {
+                if (index == -1)
+                    return;
+
+                if (weight > math.FLT_MIN_NORMAL)
+                {
+                    ref var motion = ref motionKeys[index];
+
+                    switch (motion.type)
+                    {
+                        case AnimatorControllerMotionType.None:
+                            ref var clip = ref clipKeys[motion.index];
+                            clip.Evaluate(
+                                rigIndex,
+                                rigInstanceID,
+                                instanceID,
+                                layerIndex,
+                                depth,
+                                weight,
+                                speed,
+                                previousTime,
+                                currentTime,
+                                clips,
+                                rigDefinitions,
+                                rigRemapTables,
+                                ref remaps,
+                                ref outClips, 
+                                ref outWeights, 
+                                ref outTimes, 
+                                ref outEvents);
+                            break;
+                        case AnimatorControllerMotionType.Simple1D:
+                            {
+                                Clip.Evaluate(
+                                    0,
+                                    MotionClipWrapMode.Managed, 
+                                    instanceID,
+                                    rigInstanceID,
+                                    -1,
+                                    layerIndex,
+                                    depth,
+                                    speed,
+                                    currentTime,
+                                    weight,
+                                    BlobAssetReference<Unity.Animation.Clip>.Null,
+                                    rigDefinitions,
+                                    rigRemapTables,
+                                    ref outClips,
+                                    ref outWeights,
+                                    ref outTimes,
+                                    ref remaps);
+
+                                ref var blendTree = ref motions[new SingletonAssetContainerHandle(instanceID, motion.index)].Reinterpret<AnimatorControllerBlendTree1DSimple>().Value;
+                                int numWeights = motion.childIndices.Length;
+                                var weights = new NativeArray<float>(numWeights, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+
+                                int paramterIndex = Parameter.IndexOf(blendTree.blendParameter, ref parameterKeys);
+
+                                AnimatorControllerBlendTree1DSimple.ComputeWeights(
+                                    blendTree.motionThresholds.AsArray(),
+                                    paramterIndex == -1 ? 0.0f : parameterKeys[paramterIndex].GetFloat(paramterIndex, parameterValues),
+                                    ref weights);
+
+                                ++depth;
+
+                                float motionSpeed;
+                                for (int i = 0; i < numWeights; ++i)
+                                {
+                                    motionSpeed = blendTree.motionSpeeds[i];
+
+                                    Evaluate(
+                                        motion.childIndices[i],
+                                        rigIndex,
+                                        rigInstanceID,
+                                        instanceID,
+                                        layerIndex,
+                                        depth,
+                                        speed * motionSpeed,
+                                        previousTime * motionSpeed, 
+                                        currentTime * motionSpeed,
+                                        weights[i], // * weight,
+                                        parameterValues,
+                                        motions,
+                                        clips,
+                                        rigDefinitions,
+                                        rigRemapTables,
+                                        ref remaps,
+                                        ref clipKeys,
+                                        ref motionKeys,
+                                        ref parameterKeys, 
+                                        ref outClips,
+                                        ref outWeights,
+                                        ref outTimes,
+                                        ref outEvents);
+                                }
+
+                                weights.Dispose();
+                            }
+                            break;
+                        case AnimatorControllerMotionType.SimpleDirectional2D:
+                            {
+                                Clip.Evaluate(
+                                       0,
+                                       MotionClipWrapMode.Managed, 
+                                       instanceID,
+                                       rigInstanceID,
+                                       -1,
+                                       layerIndex,
+                                       depth,
+                                       speed,
+                                       currentTime,
+                                       weight,
+                                       BlobAssetReference<Unity.Animation.Clip>.Null,
+                                       rigDefinitions,
+                                       rigRemapTables,
+                                       ref outClips,
+                                       ref outWeights,
+                                       ref outTimes,
+                                       ref remaps);
+
+                                ref var blendTree = ref motions[new SingletonAssetContainerHandle(instanceID, motion.index)].Reinterpret<AnimatorControllerBlendTree2DSimpleDirectional>().Value;
+                                int numWeights = blendTree.motionPositions.Length;
+                                var weights = new NativeArray<float>(numWeights, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+
+                                int paramterIndexX = Parameter.IndexOf(blendTree.blendParameterX, ref parameterKeys),
+                                    paramterIndexY = Parameter.IndexOf(blendTree.blendParameterY, ref parameterKeys);
+
+                                AnimatorControllerBlendTree2DSimpleDirectional.ComputeWeights(
+                                    blendTree.motionPositions.AsArray(),
+                                    math.float2(
+                                        paramterIndexX == -1 ? 0.0f : parameterKeys[paramterIndexX].GetFloat(paramterIndexX, parameterValues),
+                                        paramterIndexY == -1 ? 0.0f : parameterKeys[paramterIndexY].GetFloat(paramterIndexY, parameterValues)),
+                                    ref weights);
+
+                                ++depth;
+
+                                float motionSpeed;
+                                for (int i = 0; i < numWeights; ++i)
+                                {
+                                    motionSpeed = blendTree.motionSpeeds[i];
+
+                                    Evaluate(
+                                        motion.childIndices[i],
+                                        rigIndex,
+                                        rigInstanceID,
+                                        instanceID,
+                                        layerIndex,
+                                        depth,
+                                        speed * motionSpeed,
+                                        previousTime * motionSpeed, 
+                                        currentTime * motionSpeed,
+                                        weights[i], // * weight,
+                                        parameterValues,
+                                        motions,
+                                        clips,
+                                        rigDefinitions,
+                                        rigRemapTables,
+                                        ref remaps,
+                                        ref clipKeys,
+                                        ref motionKeys,
+                                        ref parameterKeys,
+                                        ref outClips,
+                                        ref outWeights,
+                                        ref outTimes,
+                                        ref outEvents);
+                                }
+
+                                weights.Dispose();
+                            }
+                            break;
+                        case AnimatorControllerMotionType.FreeformCartesian2D:
+                            {
+                                Clip.Evaluate(
+                                       0,
+                                       MotionClipWrapMode.Managed, 
+                                       instanceID,
+                                       rigInstanceID,
+                                       -1,
+                                       layerIndex,
+                                       depth,
+                                       speed,
+                                       currentTime,
+                                       weight,
+                                       BlobAssetReference<Unity.Animation.Clip>.Null,
+                                       rigDefinitions,
+                                       rigRemapTables,
+                                       ref outClips,
+                                       ref outWeights,
+                                       ref outTimes,
+                                       ref remaps);
+
+                                ref var blendTree = ref motions[new SingletonAssetContainerHandle(instanceID, motion.index)].Reinterpret<AnimatorControllerBlendTree2DFreeformCartesian>().Value;
+                                int numWeights = blendTree.motionPositions.Length;
+                                var weights = new NativeArray<float>(numWeights, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+
+                                int paramterIndexX = Parameter.IndexOf(blendTree.blendParameterX, ref parameterKeys),
+                                    paramterIndexY = Parameter.IndexOf(blendTree.blendParameterY, ref parameterKeys);
+
+                                AnimatorControllerBlendTree2DFreeformCartesian.ComputeWeights(
+                                    blendTree.motionPositions.AsArray(),
+                                    math.float2(
+                                        paramterIndexX == -1 ? 0.0f : parameterKeys[paramterIndexX].GetFloat(paramterIndexX, parameterValues),
+                                        paramterIndexY == -1 ? 0.0f : parameterKeys[paramterIndexY].GetFloat(paramterIndexY, parameterValues)),
+                                    ref weights);
+
+                                ++depth;
+
+                                float motionSpeed;
+                                for (int i = 0; i < numWeights; ++i)
+                                {
+                                    motionSpeed = blendTree.motionSpeeds[i];
+
+                                    Evaluate(
+                                        motion.childIndices[i],
+                                        rigIndex,
+                                        rigInstanceID,
+                                        instanceID,
+                                        layerIndex,
+                                        depth,
+                                        speed * motionSpeed,
+                                        previousTime * motionSpeed,
+                                        currentTime * motionSpeed,
+                                        weights[i], // * weight,
+                                        parameterValues,
+                                        motions,
+                                        clips,
+                                        rigDefinitions,
+                                        rigRemapTables,
+                                        ref remaps,
+                                        ref clipKeys,
+                                        ref motionKeys,
+                                        ref parameterKeys,
+                                        ref outClips,
+                                        ref outWeights,
+                                        ref outTimes,
+                                        ref outEvents);
+                                }
+
+                                weights.Dispose();
+                            }
+                            break;
+                    }
+                }
+            }
+
+            /*public static void __Evaluate(
+                MotionClipFlag flag,
+                MotionClipWrapMode wrapMode, 
+                int instanceID,
+                int rigInstanceID,
+                int remapIndex, 
+                int layerIndex, 
+                int depth, 
+                float speed,
+                float time,
+                float weight,
+                in BlobAssetReference<Unity.Animation.Clip> clip,
+                in SingletonAssetContainer<BlobAssetReference<RigDefinition>>.Reader rigDefinitions,
+                in SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.Reader rigRemapTables,
+                ref DynamicBuffer<MotionClip> outClips,
+                ref DynamicBuffer<MotionClipWeight> outWeights,
+                ref DynamicBuffer<MotionClipTime> outTimes,
+                ref BlobArray<Remap> remaps)
+            {
+                MotionClip result;
+
+                result.flag = flag;
+                result.wrapMode = wrapMode;
+                result.layerIndex = layerIndex;
+                result.depth = depth;
+                result.speed = speed;
+
+                result.value = clip;
+
+                if (remapIndex == -1)
+                {
+                    result.remapTable = default;
+                    result.remapDefinition = default;
+                }
+                else
+                {
+                    ref var remap = ref remaps[remapIndex];
+
+                    result.remapTable = rigRemapTables[new SingletonAssetContainerHandle(instanceID, remap.index)];
+                    result.remapDefinition = rigDefinitions[new SingletonAssetContainerHandle(rigInstanceID, remap.sourceRigIndex)];
+                }
+
+                outClips.Add(result);
+
+                MotionClipWeight clipWeight;
+                //clipWeight.version = MotionClipSystem.Version.Data;
+                clipWeight.value = weight;
+                outWeights.Add(clipWeight);
+
+                if (outTimes.IsCreated)
+                {
+                    MotionClipTime clipTime;
+                    clipTime.value = time;
+                    outTimes.Add(clipTime);
+                }
+            }*/
         }
 
         public struct Condition
@@ -1420,8 +1516,8 @@ namespace ZG
                         Motion.Evaluate(
                             layer.stateMotionIndices[state.sourceStateIndex],
                             rigIndex,
-                            instanceID,
                             rigInstanceID,
+                            instanceID,
                             i,
                             0,
                             sourceState.GetSpeed(ref this.parameters, parameters),
@@ -1451,8 +1547,8 @@ namespace ZG
                         Motion.Evaluate(
                             layer.stateMotionIndices[state.destinationStateIndex],
                             rigIndex,
-                            instanceID,
                             rigInstanceID,
+                            instanceID,
                             i,
                             0,
                             destinationState.GetSpeed(ref this.parameters, parameters),

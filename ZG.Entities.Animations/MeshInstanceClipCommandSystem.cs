@@ -8,20 +8,12 @@ using Unity.Animation;
 
 namespace ZG
 {
-    [Serializable]
-    public struct MeshInstanceMotionClipCommand : IComponentData
+    public struct MeshInstanceClipCommand : IBufferElementData, IEnableableComponent
     {
-        public uint version;
         public int rigIndex;
         public int clipIndex;
         public float speed;
         public float blendTime;
-    }
-
-    [Serializable]
-    public struct MeshInstanceMotionClipCommandVersion : IComponentData
-    {
-        public uint value;
     }
 
     [BurstCompile, UpdateBefore(typeof(AnimationSystemGroup))]
@@ -41,21 +33,18 @@ namespace ZG
             public SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.Reader rigRemapTables;
 
             [ReadOnly]
-            public BufferAccessor<MeshInstanceRig> rigs;
-
-            [ReadOnly]
-            public NativeArray<MeshInstanceRigID> rigIDs;
-
-            [ReadOnly]
             public NativeArray<MeshInstanceClipData> instances;
 
             [ReadOnly]
             public NativeArray<MeshInstanceMotionClipFactoryData> factories;
 
             [ReadOnly]
-            public NativeArray<MeshInstanceMotionClipCommand> commands;
+            public NativeArray<MeshInstanceRigID> rigIDs;
 
-            public NativeArray<MeshInstanceMotionClipCommandVersion> commandVersions;
+            [ReadOnly]
+            public BufferAccessor<MeshInstanceRig> rigs;
+
+            public BufferAccessor<MeshInstanceClipCommand> commands;
 
             [NativeDisableParallelForRestriction]
             public ComponentLookup<MotionClipSafeTime> safeTimes;
@@ -71,42 +60,41 @@ namespace ZG
 
             public void Execute(int index)
             {
-                var command = commands[index];
-                var commandVersion = commandVersions[index];
-                if (command.version != commandVersion.value)
-                    return;
-
-                commandVersion.value = command.version + 1;
-                commandVersions[index] = commandVersion;
-
+                var commands = this.commands[index];
+                
                 int rigInstanceID = rigIDs[index].value;
                 var rigs = this.rigs[index];
                 ref var definition = ref instances[index].definition.Value;
                 ref var factory = ref factories[index].definition.Value;
-                if (command.rigIndex == -1)
+                foreach (var command in commands)
                 {
-                    int numRigs = factory.rigs.Length;
-                    for(int i = 0; i < numRigs; ++i)
+                    if (command.rigIndex == -1)
+                    {
+                        int numRigs = factory.rigs.Length;
+                        for (int i = 0; i < numRigs; ++i)
+                            Execute(
+                                rigInstanceID,
+                                command.clipIndex,
+                                i,
+                                command.speed,
+                                command.blendTime,
+                                rigs,
+                                ref factory,
+                                ref definition);
+                    }
+                    else
                         Execute(
                             rigInstanceID,
                             command.clipIndex,
-                            i,
-                            command.speed, 
-                            command.blendTime, 
+                            command.rigIndex,
+                            command.speed,
+                            command.blendTime,
                             rigs,
                             ref factory,
                             ref definition);
                 }
-                else
-                    Execute(
-                        rigInstanceID,
-                        command.clipIndex,
-                        command.rigIndex,
-                        command.speed,
-                        command.blendTime,
-                        rigs,
-                        ref factory, 
-                        ref definition);
+
+                commands.Clear();
             }
 
             public void Execute(
@@ -181,21 +169,18 @@ namespace ZG
             public SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.Reader rigRemapTables;
 
             [ReadOnly]
-            public BufferTypeHandle<MeshInstanceRig> rigType;
-
-            [ReadOnly]
-            public ComponentTypeHandle<MeshInstanceRigID> rigIDType;
-
-            [ReadOnly]
             public ComponentTypeHandle<MeshInstanceClipData> instanceType;
 
             [ReadOnly]
             public ComponentTypeHandle<MeshInstanceMotionClipFactoryData> factoryType;
 
             [ReadOnly]
-            public ComponentTypeHandle<MeshInstanceMotionClipCommand> commandType;
+            public ComponentTypeHandle<MeshInstanceRigID> rigIDType;
 
-            public ComponentTypeHandle<MeshInstanceMotionClipCommandVersion> commandVersionType;
+            [ReadOnly]
+            public BufferTypeHandle<MeshInstanceRig> rigType;
+
+            public BufferTypeHandle<MeshInstanceClipCommand> commandType;
 
             [NativeDisableParallelForRestriction]
             public ComponentLookup<MotionClipSafeTime> safeTimes;
@@ -216,12 +201,11 @@ namespace ZG
                 command.clips = clips;
                 command.rigDefinitions = rigDefinitions;
                 command.rigRemapTables = rigRemapTables;
-                command.rigs = chunk.GetBufferAccessor(ref rigType);
-                command.rigIDs = chunk.GetNativeArray(ref rigIDType);
                 command.instances = chunk.GetNativeArray(ref instanceType);
                 command.factories = chunk.GetNativeArray(ref factoryType);
-                command.commands = chunk.GetNativeArray(ref commandType);
-                command.commandVersions = chunk.GetNativeArray(ref commandVersionType);
+                command.rigIDs = chunk.GetNativeArray(ref rigIDType);
+                command.rigs = chunk.GetBufferAccessor(ref rigType);
+                command.commands = chunk.GetBufferAccessor(ref commandType);
                 command.safeTimes = safeTimes;
                 command.motionClips = motionClips;
                 command.motionClipTimes = motionClipTimes;
@@ -230,40 +214,64 @@ namespace ZG
 
                 var iterator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (iterator.NextEntityIndex(out int i))
+                {
                     command.Execute(i);
+
+                    chunk.SetComponentEnabled(ref commandType, i, false);
+                }
             }
         }
 
         private EntityQuery __group;
+
+        private ComponentTypeHandle<MeshInstanceClipData> __instanceType;
+
+        private ComponentTypeHandle<MeshInstanceMotionClipFactoryData> __factoryType;
+
+        private ComponentTypeHandle<MeshInstanceRigID> __rigIDType;
+
+        private BufferTypeHandle<MeshInstanceRig> __rigType;
+        private BufferTypeHandle<MeshInstanceClipCommand> __commandType;
+
+        private ComponentLookup<MotionClipSafeTime> __safeTimes;
+
+        private BufferLookup<MotionClip> __motionClips;
+        private BufferLookup<MotionClipTime> __motionClipTimes;
+        private BufferLookup<MotionClipWeight> __motionClipWeights;
+        private BufferLookup<MotionClipWeightStep> __motionClipWeightSteps;
+
         private SingletonAssetContainer<BlobAssetReference<Clip>> __clips;
         private SingletonAssetContainer<BlobAssetReference<RigDefinition>> __rigDefinitions;
         private SingletonAssetContainer<BlobAssetReference<RigRemapTable>> __rigRemapTables;
 
         public void OnCreate(ref SystemState state)
         {
-            __group = state.GetEntityQuery(
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceRig>(),
-                        ComponentType.ReadOnly<MeshInstanceRigID>(),
-                        ComponentType.ReadOnly<MeshInstanceClipData>(),
-                        ComponentType.ReadOnly<MeshInstanceMotionClipID>(),
-                        ComponentType.ReadOnly<MeshInstanceMotionClipFactoryData>(),
-                        ComponentType.ReadOnly<MeshInstanceMotionClipCommand>(),
-                        ComponentType.ReadWrite<MeshInstanceMotionClipCommandVersion>()
-                    },
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __group = builder
+                        .WithAll<MeshInstanceRig, MeshInstanceRigID, MeshInstanceClipData, MeshInstanceMotionClipID, MeshInstanceMotionClipFactoryData>()
+                        .WithAllRW<MeshInstanceClipCommand>()
+                        .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                        .Build(ref state);
 
-                    Options = EntityQueryOptions.IncludeDisabledEntities
-                });
-            __group.SetChangedVersionFilter(typeof(MeshInstanceMotionClipCommand));
+            __group.SetChangedVersionFilter(ComponentType.ReadWrite<MeshInstanceClipCommand>());
+
+            __instanceType = state.GetComponentTypeHandle<MeshInstanceClipData>(true);
+            __factoryType = state.GetComponentTypeHandle<MeshInstanceMotionClipFactoryData>(true);
+            __rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
+            __rigType = state.GetBufferTypeHandle<MeshInstanceRig>(true);
+            __commandType = state.GetBufferTypeHandle<MeshInstanceClipCommand>();
+            __safeTimes = state.GetComponentLookup<MotionClipSafeTime>();
+            __motionClips = state.GetBufferLookup<MotionClip>();
+            __motionClipTimes = state.GetBufferLookup<MotionClipTime>();
+            __motionClipWeights = state.GetBufferLookup<MotionClipWeight>();
+            __motionClipWeightSteps = state.GetBufferLookup<MotionClipWeightStep>();
 
             __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.instance;
             __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.instance;
             __rigRemapTables = SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.instance;
         }
 
+        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
 
@@ -277,19 +285,18 @@ namespace ZG
             command.clips = __clips.reader;
             command.rigDefinitions = __rigDefinitions.reader;
             command.rigRemapTables = __rigRemapTables.reader;
-            command.rigType = state.GetBufferTypeHandle<MeshInstanceRig>(true);
-            command.rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
-            command.instanceType = state.GetComponentTypeHandle<MeshInstanceClipData>(true);
-            command.factoryType = state.GetComponentTypeHandle<MeshInstanceMotionClipFactoryData>(true);
-            command.commandType = state.GetComponentTypeHandle<MeshInstanceMotionClipCommand>(true);
-            command.commandVersionType = state.GetComponentTypeHandle<MeshInstanceMotionClipCommandVersion>();
-            command.safeTimes = state.GetComponentLookup<MotionClipSafeTime>();
-            command.motionClips = state.GetBufferLookup<MotionClip>();
-            command.motionClipTimes = state.GetBufferLookup<MotionClipTime>();
-            command.motionClipWeights = state.GetBufferLookup<MotionClipWeight>();
-            command.motionClipWeightSteps = state.GetBufferLookup<MotionClipWeightStep>();
+            command.instanceType = __instanceType.UpdateAsRef(ref state);
+            command.factoryType = __factoryType.UpdateAsRef(ref state);
+            command.rigIDType = __rigIDType.UpdateAsRef(ref state);
+            command.rigType = __rigType.UpdateAsRef(ref state);
+            command.commandType = __commandType.UpdateAsRef(ref state);
+            command.safeTimes = __safeTimes.UpdateAsRef(ref state);
+            command.motionClips = __motionClips.UpdateAsRef(ref state);
+            command.motionClipTimes = __motionClipTimes.UpdateAsRef(ref state);
+            command.motionClipWeights = __motionClipWeights.UpdateAsRef(ref state);
+            command.motionClipWeightSteps = __motionClipWeightSteps.UpdateAsRef(ref state);
 
-            var jobHandle = command.ScheduleParallel(__group, state.Dependency);
+            var jobHandle = command.ScheduleParallelByRef(__group, state.Dependency);
 
             int systemID = state.GetSystemID();
 
