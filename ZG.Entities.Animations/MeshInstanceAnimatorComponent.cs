@@ -16,7 +16,7 @@ namespace ZG
         [SerializeField]
         internal MeshInstanceAnimatorDatabase _database;
 
-        public Component instance => this;
+        public Component instance => gameObjectEntity;
 
         public static void SetInteger(
             int id,
