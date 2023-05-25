@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
+using Unity.Collections;
+using Unity.Mathematics;
+using Unity.Entities;
 using UnityEngine.Playables;
 
 namespace ZG
@@ -56,11 +58,22 @@ namespace ZG
             for (int i = 0; i < numInputs; ++i)
             {
                 input = playable.GetInput(i);
-                //float weight = playable.GetInputWeight(i);
                 var clip = ((ScriptPlayable<MeshInstanceClipPlayable>)input).GetBehaviour();
                 if (clip != null/* && playable.GetPlayState() == PlayState.Playing*/)
-                    __tracks.Add(clip.GetTrack(input, playable.GetInputWeight(i)));
+                {
+                    float weight = playable.GetInputWeight(i);
+
+                    __tracks.Add(clip.GetTrack(input, weight));
+                }
             }
+
+            /*Translation translation;
+            translation.Value = matrix.c3.xyz;
+            __player.SetComponentData(translation);
+
+            Rotation rotation;
+            rotation.Value = matrix.c3.xyz;
+            __player.SetComponentData(translation);*/
 
             __player.SetBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
             //__player.SetComponentEnabled<MeshInstanceAnimatorControllerClipCommand>(true);

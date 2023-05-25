@@ -1,10 +1,12 @@
 using System;
 using Unity.Entities;
+using Unity.Transforms;
 using UnityEngine;
 
 namespace ZG
 {
     [EntityComponent(typeof(MeshInstanceRigData))]
+    [EntityComponent(typeof(LocalToWorld))]
     public class MeshInstanceRigComponent : EntityProxyComponent, IEntityComponent, IEntityRuntimeComponentDefinition
     {
         [SerializeField]

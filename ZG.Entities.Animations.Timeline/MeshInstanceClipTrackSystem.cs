@@ -4,6 +4,8 @@ using Unity.Jobs;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Animation;
+using Unity.Mathematics;
+using Unity.Transforms;
 
 namespace ZG
 {
@@ -13,11 +15,16 @@ namespace ZG
         public int clipIndex;
         public float weight;
         public float time;
+        public float4x4 matrix;
         public BlobAssetReference<MeshInstanceClipFactoryDefinition> factory;
         public BlobAssetReference<MeshInstanceClipDefinition> definition;
     }
 
-    [BurstCompile, UpdateBefore(typeof(AnimationSystemGroup)), UpdateAfter(typeof(AnimatorControllerSystem)), UpdateAfter(typeof(MeshInstanceClipCommandSystem))]
+    [BurstCompile, 
+        UpdateBefore(typeof(AnimationSystemGroup)),
+        UpdateAfter(typeof(TransformSystemGroup)), 
+        UpdateAfter(typeof(AnimatorControllerSystem)), 
+        UpdateAfter(typeof(MeshInstanceClipCommandSystem))]
     public partial struct MeshInstanceClipTrackSystem : ISystem
     {
         private struct Evaluate
@@ -47,6 +54,8 @@ namespace ZG
             [NativeDisableParallelForRestriction]
             public BufferLookup<MotionClipWeight> motionClipWeights;
 
+            public NativeArray<LocalToWorld> localToWorlds;
+
             public void Execute(int index)
             {
                 Entity entity;
@@ -62,9 +71,15 @@ namespace ZG
                     motionClipWeights[entity].Clear();
                 }
 
+                LocalToWorld localToWorld;
+                localToWorld.Value = float4x4.zero;
+
                 int rigInstanceID = rigIDs[index].value;
                 var tracks = this.tracks[index];
                 foreach (var track in tracks)
+                {
+                    localToWorld.Value += math.float4x4(track.matrix) * track.weight;
+
                     Execute(
                         rigInstanceID,
                         track.clipIndex,
@@ -74,6 +89,10 @@ namespace ZG
                         rigs,
                         ref track.factory.Value,
                         ref track.definition.Value);
+                }
+
+                if(index < localToWorlds.Length)
+                    localToWorlds[index] = localToWorld;
             }
 
             public void Execute(
@@ -145,6 +164,8 @@ namespace ZG
             [NativeDisableParallelForRestriction]
             public BufferLookup<MotionClipWeight> motionClipWeights;
 
+            public ComponentTypeHandle<LocalToWorld> localToWorldType;
+
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 Evaluate evaluate;
@@ -157,6 +178,7 @@ namespace ZG
                 evaluate.motionClips = motionClips;
                 evaluate.motionClipTimes = motionClipTimes;
                 evaluate.motionClipWeights = motionClipWeights;
+                evaluate.localToWorlds = chunk.GetNativeArray(ref localToWorldType);
 
                 var iterator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (iterator.NextEntityIndex(out int i))
@@ -174,6 +196,8 @@ namespace ZG
         private BufferLookup<MotionClip> __motionClips;
         private BufferLookup<MotionClipTime> __motionClipTimes;
         private BufferLookup<MotionClipWeight> __motionClipWeights;
+
+        private ComponentTypeHandle<LocalToWorld> __localToWorldType;
 
         private SingletonAssetContainer<BlobAssetReference<Clip>> __clips;
         private SingletonAssetContainer<BlobAssetReference<RigDefinition>> __rigDefinitions;
@@ -193,6 +217,7 @@ namespace ZG
             __motionClips = state.GetBufferLookup<MotionClip>();
             __motionClipTimes = state.GetBufferLookup<MotionClipTime>();
             __motionClipWeights = state.GetBufferLookup<MotionClipWeight>();
+            __localToWorldType = state.GetComponentTypeHandle<LocalToWorld>();
 
             __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.instance;
             __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.instance;
@@ -218,6 +243,7 @@ namespace ZG
             evaluate.motionClips = __motionClips.UpdateAsRef(ref state);
             evaluate.motionClipTimes = __motionClipTimes.UpdateAsRef(ref state);
             evaluate.motionClipWeights = __motionClipWeights.UpdateAsRef(ref state);
+            evaluate.localToWorldType = __localToWorldType.UpdateAsRef(ref state);
 
             var jobHandle = evaluate.ScheduleParallelByRef(__group, state.Dependency);
 
