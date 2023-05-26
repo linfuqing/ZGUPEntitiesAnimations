@@ -62,7 +62,7 @@ namespace ZG
                 var rigs = this.rigs[index];
                 foreach (var rig in rigs)
                 {
-                    entity = rigs[index].entity;
+                    entity = rig.entity;
 
                     motionClips[entity].Clear();
 
