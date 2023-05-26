@@ -33,7 +33,7 @@ namespace ZG
 
                 if (player != null)
                 {
-                    player.Awake();
+                    //player.Awake();
                     player.AddBuffer<MeshInstanceAnimatorControllerClipTrack>();
                 }
 

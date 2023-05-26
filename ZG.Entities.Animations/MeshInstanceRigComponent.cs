@@ -1,5 +1,6 @@
 using System;
 using Unity.Entities;
+using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
 
@@ -73,6 +74,10 @@ namespace ZG
             MeshInstanceRigData instance;
             instance.definition = _database.definition;
             assigner.SetComponentData(entity, instance);
+
+            LocalToWorld localToWorld;
+            localToWorld.Value = float4x4.identity;
+            assigner.SetComponentData(entity, localToWorld);
         }
     }
 }

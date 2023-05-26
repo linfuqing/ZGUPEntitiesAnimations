@@ -4,6 +4,7 @@ using Unity.Collections;
 using Unity.Mathematics;
 using Unity.Entities;
 using UnityEngine.Playables;
+using Unity.Transforms;
 
 namespace ZG
 {
@@ -35,7 +36,7 @@ namespace ZG
 
                 if (player != null)
                 {
-                    player.Awake();
+                    //player.Awake();
                     player.AddBuffer<MeshInstanceClipTrack>();
                 }
 
