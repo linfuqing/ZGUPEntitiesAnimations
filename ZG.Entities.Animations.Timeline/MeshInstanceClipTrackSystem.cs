@@ -20,10 +20,10 @@ namespace ZG
         public BlobAssetReference<MeshInstanceClipDefinition> definition;
     }
 
-    [BurstCompile, 
+    [BurstCompile,
         UpdateBefore(typeof(AnimationSystemGroup)),
-        UpdateAfter(typeof(TransformSystemGroup)), 
-        UpdateAfter(typeof(AnimatorControllerSystem)), 
+        UpdateAfter(typeof(TransformSystemGroup)),
+        UpdateAfter(typeof(AnimatorControllerSystem)),
         UpdateAfter(typeof(MeshInstanceClipCommandSystem))]
     public partial struct MeshInstanceClipTrackSystem : ISystem
     {
@@ -54,31 +54,43 @@ namespace ZG
             [NativeDisableParallelForRestriction]
             public BufferLookup<MotionClipWeight> motionClipWeights;
 
-            public NativeArray<LocalToWorld> localToWorlds;
+            [NativeDisableParallelForRestriction]
+            public ComponentLookup<LocalToWorld> localToWorlds;
+
+            [ReadOnly]
+            public ComponentLookup<LocalToParent> localToParents;
+
+            [ReadOnly]
+            public ComponentLookup<Translation> translations;
+
+            [ReadOnly]
+            public ComponentLookup<Rotation> rotations;
+
+            [ReadOnly]
+            public ComponentLookup<Scale> scales;
+
+            [ReadOnly]
+            public ComponentLookup<NonUniformScale> nonUniformScales;
 
             public void Execute(int index)
             {
-                Entity entity;
                 var rigs = this.rigs[index];
                 foreach (var rig in rigs)
                 {
-                    entity = rig.entity;
+                    motionClips[rig.entity].Clear();
 
-                    motionClips[entity].Clear();
+                    motionClipTimes[rig.entity].Clear();
 
-                    motionClipTimes[entity].Clear();
-
-                    motionClipWeights[entity].Clear();
+                    motionClipWeights[rig.entity].Clear();
                 }
 
-                LocalToWorld localToWorld;
-                localToWorld.Value = float4x4.zero;
+                float4x4 matrix = float4x4.zero;
 
                 int rigInstanceID = rigIDs[index].value;
                 var tracks = this.tracks[index];
                 foreach (var track in tracks)
                 {
-                    localToWorld.Value += math.float4x4(track.matrix) * track.weight;
+                    matrix += math.float4x4(track.matrix) * track.weight;
 
                     Execute(
                         rigInstanceID,
@@ -91,16 +103,45 @@ namespace ZG
                         ref track.definition.Value);
                 }
 
-                if(index < localToWorlds.Length)
-                    localToWorlds[index] = localToWorld;
+                float3 translation, scale;
+                quaternion rotation;
+                LocalToWorld localToWorld;
+                foreach (var rig in rigs)
+                {
+                    if (!localToWorlds.HasComponent(rig.entity))
+                        continue;
+
+                    if (localToParents.HasComponent(rig.entity))
+                    {
+                        localToWorld.Value = localToParents[rig.entity].Value;
+                    }
+                    else
+                    {
+                        translation = translations.HasComponent(rig.entity) ? translations[rig.entity].Value : float3.zero;
+
+                        rotation = rotations.HasComponent(rig.entity) ? rotations[rig.entity].Value : quaternion.identity;
+
+                        if (nonUniformScales.HasComponent(rig.entity))
+                            scale = nonUniformScales[rig.entity].Value;
+                        else if (scales.HasComponent(rig.entity))
+                            scale = scales[rig.entity].Value;
+                        else
+                            scale = 1.0f;
+
+                        localToWorld.Value = float4x4.TRS(translation, rotation, scale);
+                    }
+
+                    localToWorld.Value = math.mul(matrix, localToWorld.Value);
+                    localToWorlds[rig.entity] = localToWorld;
+                }
             }
 
             public void Execute(
                 int rigInstanceID,
                 int clipIndex,
                 int rigIndex,
-                float weight, 
-                float time, 
+                float weight,
+                float time,
                 in DynamicBuffer<MeshInstanceRig> rigs,
                 ref MeshInstanceClipFactoryDefinition factory,
                 ref MeshInstanceClipDefinition definition)
@@ -164,7 +205,23 @@ namespace ZG
             [NativeDisableParallelForRestriction]
             public BufferLookup<MotionClipWeight> motionClipWeights;
 
-            public ComponentTypeHandle<LocalToWorld> localToWorldType;
+            [NativeDisableParallelForRestriction]
+            public ComponentLookup<LocalToWorld> localToWorlds;
+
+            [ReadOnly]
+            public ComponentLookup<LocalToParent> localToParents;
+
+            [ReadOnly]
+            public ComponentLookup<Translation> translations;
+
+            [ReadOnly]
+            public ComponentLookup<Rotation> rotations;
+
+            [ReadOnly]
+            public ComponentLookup<Scale> scales;
+
+            [ReadOnly]
+            public ComponentLookup<NonUniformScale> nonUniformScales;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
@@ -178,7 +235,12 @@ namespace ZG
                 evaluate.motionClips = motionClips;
                 evaluate.motionClipTimes = motionClipTimes;
                 evaluate.motionClipWeights = motionClipWeights;
-                evaluate.localToWorlds = chunk.GetNativeArray(ref localToWorldType);
+                evaluate.localToWorlds = localToWorlds;
+                evaluate.localToParents = localToParents;
+                evaluate.translations = translations;
+                evaluate.rotations = rotations;
+                evaluate.scales = scales;
+                evaluate.nonUniformScales = nonUniformScales;
 
                 var iterator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (iterator.NextEntityIndex(out int i))
@@ -197,7 +259,14 @@ namespace ZG
         private BufferLookup<MotionClipTime> __motionClipTimes;
         private BufferLookup<MotionClipWeight> __motionClipWeights;
 
-        private ComponentTypeHandle<LocalToWorld> __localToWorldType;
+        private ComponentLookup<LocalToWorld> __localToWorlds;
+
+        private ComponentLookup<LocalToParent> __localToParents;
+        private ComponentLookup<Translation> __translations;
+        private ComponentLookup<Rotation> __rotations;
+        private ComponentLookup<Scale> __scales;
+        private ComponentLookup<NonUniformScale> __nonUniformScales;
+
 
         private SingletonAssetContainer<BlobAssetReference<Clip>> __clips;
         private SingletonAssetContainer<BlobAssetReference<RigDefinition>> __rigDefinitions;
@@ -217,7 +286,12 @@ namespace ZG
             __motionClips = state.GetBufferLookup<MotionClip>();
             __motionClipTimes = state.GetBufferLookup<MotionClipTime>();
             __motionClipWeights = state.GetBufferLookup<MotionClipWeight>();
-            __localToWorldType = state.GetComponentTypeHandle<LocalToWorld>();
+            __localToWorlds = state.GetComponentLookup<LocalToWorld>();
+            __localToParents = state.GetComponentLookup<LocalToParent>(true);
+            __translations = state.GetComponentLookup<Translation>(true);
+            __rotations = state.GetComponentLookup<Rotation>(true);
+            __scales = state.GetComponentLookup<Scale>(true);
+            __nonUniformScales = state.GetComponentLookup<NonUniformScale>(true);
 
             __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.instance;
             __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.instance;
@@ -243,7 +317,12 @@ namespace ZG
             evaluate.motionClips = __motionClips.UpdateAsRef(ref state);
             evaluate.motionClipTimes = __motionClipTimes.UpdateAsRef(ref state);
             evaluate.motionClipWeights = __motionClipWeights.UpdateAsRef(ref state);
-            evaluate.localToWorldType = __localToWorldType.UpdateAsRef(ref state);
+            evaluate.localToWorlds = __localToWorlds.UpdateAsRef(ref state);
+            evaluate.localToParents = __localToParents.UpdateAsRef(ref state);
+            evaluate.translations = __translations.UpdateAsRef(ref state);
+            evaluate.rotations = __rotations.UpdateAsRef(ref state);
+            evaluate.scales = __scales.UpdateAsRef(ref state);
+            evaluate.nonUniformScales = __nonUniformScales.UpdateAsRef(ref state);
 
             var jobHandle = evaluate.ScheduleParallelByRef(__group, state.Dependency);
 
