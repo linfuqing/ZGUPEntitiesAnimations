@@ -174,7 +174,7 @@ namespace ZG
                 foreach (var renderer in renderers)
                 {
                     skinnedMesh = renderer.sharedMesh;
-                    if(!meshIndices.ContainsKey(skinnedMesh))
+                    if (!meshIndices.ContainsKey(skinnedMesh))
                     {
                         meshIndices[skinnedMesh] = skeletonIndex;
 
@@ -198,7 +198,7 @@ namespace ZG
                     rootBone = renderers[i].rootBone;
                     if (rootBone == null)
                         parent = root;
-                    else if(!parents.TryGetValue(rootBone, out parent))
+                    else if (!parents.TryGetValue(rootBone, out parent))
                     {
                         parent = new GameObject(rootBone.name).transform;
 
@@ -333,22 +333,22 @@ namespace ZG
                     MeshInstanceRendererDatabase.Data.Build(lodGroups, rendererLODCounts);
 
                 Create(
-                    isRoot, 
+                    isRoot,
                     root,
                     renderers,
-                    rig.rigs, 
+                    rig.rigs,
                     rig.nodes,
-                    rendererLODCounts, 
+                    rendererLODCounts,
                     rigIndices);
             }
 
             public void Create(
-                bool isRoot, 
+                bool isRoot,
                 Transform root,
                 Renderer[] renderers,
                 MeshInstanceRigDatabase.Rig[] rigs,
                 MeshInstanceRigDatabase.Node[] nodes,
-                IDictionary<Renderer, int> rendererLODCounts, 
+                IDictionary<Renderer, int> rendererLODCounts,
                 IDictionary<Component, int> rigIndices)
             {
                 int numRenderers = renderers == null ? 0 : renderers.Length;
@@ -436,7 +436,7 @@ namespace ZG
 
                             if (skeletonIndices.TryGetValue(mesh, out skeletonIndex))
                             {
-                                rigRoot = __GetRigRoot(renderer.gameObject, null);
+                                rigRoot = __GetRigRoot(renderer.gameObject, out _/*, null*/);
                                 if (rigRoot == null || !rigIndices.TryGetValue(rigRoot.transform, out instance.rigIndex))
                                 {
                                     UnityEngine.Debug.LogError("Create Skeleton Fail.", renderer);
@@ -451,10 +451,10 @@ namespace ZG
                                 instance.rigIndex = __CreateSkeleton(
                                     root,
                                     skinnedMeshRenderer,
-                                    rigs, 
+                                    rigs,
                                     nodes,
                                     rigIndices,
-                                    out rigRoot, 
+                                    out rigRoot,
                                     out skeleton);
                                 if (instance.rigIndex == -1)
                                 {
@@ -515,25 +515,22 @@ namespace ZG
                 MeshInstanceRigDatabase.Rig[] rigs,
                 MeshInstanceRigDatabase.Node[] nodes,
                 IDictionary<Component, int> rigIndices,
-                out Component rigRoot, 
+                out Component rigRoot,
                 out Skeleton skeleton)
             {
                 skeleton = default;
 
-                // Would need to validate why Component.GetComponentInParent doesn't return the expected results
-                //var rigComponent = meshRenderer.GetComponentInParent<IRigAuthoring>();
-
-                var bones = new List<RigIndexToBone>();
-                rigRoot = __GetRigRoot(skinnedMeshRenderer.gameObject, bones);
-                int numBones = bones.Count;
+                //var bones = new List<RigIndexToBone>();
+                rigRoot = __GetRigRoot(skinnedMeshRenderer.gameObject/*, bones*/, out var humanBones);
+                /*int numBones = bones.Count;
                 if (numBones < 1)
-                    return -1;
+                    return -1;*/
 
                 int rigIndex;
                 if (!rigIndices.TryGetValue(rigRoot, out rigIndex))
                     return -1;
 
-                var skeletonNodes = rigs[rigIndex].skeletonNodes;
+                /*var skeletonNodes = rigs[rigIndex].skeletonNodes;
 
                 var animator = rigRoot as Animator;
                 var avatar = animator == null ? null : animator.avatar;
@@ -575,14 +572,15 @@ namespace ZG
                         else
                             bones[i] = bone;
                     }
-                }
+                }*/
 
                 using (var smrMappings = new NativeList<SkinnedMeshToRigIndexMapping>(Allocator.Temp))
                 using (var smrIndirectMappings = new NativeList<SkinnedMeshToRigIndexIndirectMapping>(Allocator.Temp))
                 {
                     var boneMatchCount = __ExtractMatchingBoneBindings(
                         skinnedMeshRenderer,
-                        bones,
+                        humanBones,
+                        rigs[rigIndex].skeletonNodes,
                         smrMappings,
                         smrIndirectMappings
                     );
@@ -667,9 +665,9 @@ namespace ZG
                     var sharedMesh = skinnedMeshRenderer.sharedMesh;
                     if (matchCount > 0)
                     {
-/*#if !ENABLE_COMPUTE_DEFORMATIONS
-                        UnityEngine.Debug.LogError("DOTS SkinnedMeshRenderer blendshapes are only supported via compute shaders in hybrid renderer. Make sure to add 'ENABLE_COMPUTE_DEFORMATIONS' to your scripting defines in Player settings.");
-#endif*/
+                        /*#if !ENABLE_COMPUTE_DEFORMATIONS
+                                                UnityEngine.Debug.LogError("DOTS SkinnedMeshRenderer blendshapes are only supported via compute shaders in hybrid renderer. Make sure to add 'ENABLE_COMPUTE_DEFORMATIONS' to your scripting defines in Player settings.");
+                        #endif*/
 
                         if (__AreBlendShapeWeightsContiguous(sharedMesh, blendShapeToRigIndexMappings))
                             skeleton.flag |= MeshInstanceSkeletonFlag.BlendShapeWeightsContiguous;
@@ -702,13 +700,15 @@ namespace ZG
                 return rigIndex;
             }
 
-            private static Component __GetRigRoot(GameObject gameObject, List<RigIndexToBone> bones)
+            private static Component __GetRigRoot(GameObject gameObject/*, List<RigIndexToBone> bones*/, out HumanBone[] humanBones)
             {
                 var rigAuthoring = gameObject.GetComponent<IRigAuthoring>();
                 if (rigAuthoring != null)
                 {
-                    if(bones != null)
-                        rigAuthoring.GetBones(bones);
+                    /*if(bones != null)
+                        rigAuthoring.GetBones(bones);*/
+
+                    humanBones = null;
 
                     return (Component)rigAuthoring;
                 }
@@ -716,7 +716,7 @@ namespace ZG
                 var animator = gameObject.GetComponent<Animator>();
                 if (animator != null)
                 {
-                    if (bones != null)
+                    /*if (bones != null)
                     {
                         animator.ExtractBoneTransforms(bones);
 
@@ -727,21 +727,23 @@ namespace ZG
                             rigIndexToBone.Index = bones.Count;
                             bones.Add(rigIndexToBone);
                         });
-                    }
+                    }*/
+
+                    var avatar = animator.avatar;
+                    humanBones = avatar == null || !avatar.isHuman ? null : avatar.humanDescription.human;
 
                     return animator;
                 }
 
-                /*if (bones != null)
-                {
-                    if (rigAuthoring != null)
-                        rigAuthoring.GetBones(bones);
-                    else
-                        animatorComponent.ExtractBoneTransforms(bones);
-                }*/
                 var parent = gameObject.transform.parent;
+                if (parent == null)
+                {
+                    humanBones = null;
 
-                return parent == null ? null : __GetRigRoot(parent.gameObject, bones);
+                    return null;
+                }
+
+                return __GetRigRoot(parent.gameObject/*, bones*/, out humanBones);
             }
 
             private static bool __AreBlendShapeWeightsContiguous(Mesh mesh, NativeList<BlendShapeToRigIndexMapping> mappings)
@@ -787,7 +789,9 @@ namespace ZG
 
             private static int __ExtractMatchingBoneBindings(
                 SkinnedMeshRenderer skinnedMeshRenderer,
-                List<RigIndexToBone> skeletonBones,
+                //List<RigIndexToBone> skeletonBones,
+                HumanBone[] humanBones,
+                MeshInstanceRigDatabase.SkeletonNode[] skeletonNodes,
                 NativeList<SkinnedMeshToRigIndexMapping> outSMRMappings,
                 NativeList<SkinnedMeshToRigIndexIndirectMapping> outSMRIndirectMappings)
             {
@@ -796,8 +800,8 @@ namespace ZG
 
                 if (skinnedMeshRenderer == null)
                     throw new ArgumentNullException("Invalid SkinnedMeshRenderer.");
-                if (skeletonBones == null)
-                    throw new ArgumentNullException($"Invalid ${nameof(skeletonBones)}.");
+                if (humanBones == null)
+                    throw new ArgumentNullException($"Invalid ${nameof(humanBones)}.");
                 if (!outSMRMappings.IsCreated)
                     throw new ArgumentException($"Invalid ${nameof(outSMRMappings)}");
                 if (!outSMRIndirectMappings.IsCreated)
@@ -808,58 +812,74 @@ namespace ZG
                     return 0;
 
                 int matchCount = 0;
-                using (var skeletonMap = new NativeParallelHashMap<int, int>(skeletonBones.Count, Allocator.Temp))
+
+                int boneIdx;
+                for (int i = 0; i < skinBones.Length; ++i)
                 {
-                    for (int i = 0; i < skeletonBones.Count; ++i)
-                    {
-                        if (skeletonBones[i].Bone != null)
-                            skeletonMap.Add(skeletonBones[i].Bone.GetInstanceID(), skeletonBones[i].Index);
-                    }
+                    var smrBone = skinBones[i];
 
-                    int boneIdx;
-                    for (int i = 0; i < skinBones.Length; ++i)
+                    boneIdx = __FindBoneIndex(smrBone.name, humanBones, skeletonNodes);
+                    if (boneIdx == -1)
                     {
-                        var smrBone = skinBones[i];
-                        if (skeletonMap.TryGetValue(smrBone.GetInstanceID(), out boneIdx))
+                        // Immediate SMR to skeleton mapping not found, walk the hierarchy to find possible parent
+                        // and compute static offset
+                        var parent = smrBone.parent;
+                        while (parent != null)
                         {
-                            outSMRMappings.Add(new SkinnedMeshToRigIndexMapping
+                            boneIdx = __FindBoneIndex(parent.name, humanBones, skeletonNodes);
+                            if (boneIdx == -1)
+                                parent = parent.parent;
+                            else
                             {
-                                SkinMeshIndex = i,
-                                RigIndex = boneIdx
-                            });
-
-                            matchCount++;
-                        }
-                        else
-                        {
-                            // Immediate SMR to skeleton mapping not found, walk the hierarchy to find possible parent
-                            // and compute static offset
-                            var parent = smrBone.parent;
-                            while (parent != null)
-                            {
-                                if (skeletonMap.TryGetValue(parent.GetInstanceID(), out boneIdx))
+                                outSMRIndirectMappings.Add(new SkinnedMeshToRigIndexIndirectMapping
                                 {
-                                    outSMRIndirectMappings.Add(new SkinnedMeshToRigIndexIndirectMapping
-                                    {
-                                        Offset = mathex.AffineTransform(parent.worldToLocalMatrix * smrBone.localToWorldMatrix),
-                                        RigIndex = boneIdx,
-                                        SkinMeshIndex = i
-                                    });
+                                    Offset = mathex.AffineTransform(parent.worldToLocalMatrix * smrBone.localToWorldMatrix),
+                                    RigIndex = boneIdx,
+                                    SkinMeshIndex = i
+                                });
 
-                                    matchCount++;
-                                    break;
-                                }
-                                else
-                                    parent = parent.parent;
+                                matchCount++;
+                                break;
                             }
-
-                            if (parent == null)
-                                UnityEngine.Debug.LogWarning($"{skinnedMeshRenderer.ToString()} references bone '{skinBones[i].name}' that cannot be found.");
                         }
+
+                        if (parent == null)
+                            UnityEngine.Debug.LogWarning($"{skinnedMeshRenderer} references bone '{skinBones[i].name}' that cannot be found.");
+                    }
+                    else
+                    {
+                        outSMRMappings.Add(new SkinnedMeshToRigIndexMapping
+                        {
+                            SkinMeshIndex = i,
+                            RigIndex = boneIdx
+                        });
+
+                        matchCount++;
                     }
                 }
 
                 return matchCount;
+            }
+
+            private static int __FindBoneIndex(
+                string boneName,
+                HumanBone[] humanBones,
+                MeshInstanceRigDatabase.SkeletonNode[] skeletonNodes)
+            {
+                int boneIndex;
+                foreach (var humanBone in humanBones)
+                {
+                    if (humanBone.boneName == boneName)
+                    {
+                        boneIndex = MeshInstanceRigDatabase.SkeletonNode.IndexOf(skeletonNodes, humanBone.humanName);
+                        if (boneIndex != -1)
+                            return boneIndex;
+
+                        break;
+                    }
+                }
+
+                return MeshInstanceRigDatabase.SkeletonNode.IndexOf(skeletonNodes, boneName);
             }
 
             private static int __ExtractMatchingBlendShapeBindings(
