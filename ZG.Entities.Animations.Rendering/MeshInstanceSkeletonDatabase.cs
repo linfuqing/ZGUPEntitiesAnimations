@@ -800,8 +800,6 @@ namespace ZG
 
                 if (skinnedMeshRenderer == null)
                     throw new ArgumentNullException("Invalid SkinnedMeshRenderer.");
-                if (humanBones == null)
-                    throw new ArgumentNullException($"Invalid ${nameof(humanBones)}.");
                 if (!outSMRMappings.IsCreated)
                     throw new ArgumentException($"Invalid ${nameof(outSMRMappings)}");
                 if (!outSMRIndirectMappings.IsCreated)
@@ -866,16 +864,19 @@ namespace ZG
                 HumanBone[] humanBones,
                 MeshInstanceRigDatabase.SkeletonNode[] skeletonNodes)
             {
-                int boneIndex;
-                foreach (var humanBone in humanBones)
+                if (humanBones != null)
                 {
-                    if (humanBone.boneName == boneName)
+                    int boneIndex;
+                    foreach (var humanBone in humanBones)
                     {
-                        boneIndex = MeshInstanceRigDatabase.SkeletonNode.IndexOf(skeletonNodes, humanBone.humanName);
-                        if (boneIndex != -1)
-                            return boneIndex;
+                        if (humanBone.boneName == boneName)
+                        {
+                            boneIndex = MeshInstanceRigDatabase.SkeletonNode.IndexOf(skeletonNodes, humanBone.humanName);
+                            if (boneIndex != -1)
+                                return boneIndex;
 
-                        break;
+                            break;
+                        }
                     }
                 }
 
