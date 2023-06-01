@@ -912,7 +912,8 @@ namespace ZG
                 {
                     id = __BuildPath(relativePath, $"blendShape.{sharedMesh.GetBlendShapeName(i)}");
 
-                    for (j = 0; j < floatChannels.Length; ++j)
+                    int length = floatChannels == null ? 0 : floatChannels.Length;
+                    for (j = 0; j < length;  ++j)
                     {
                         if (floatChannels[j].Id == id)
                             break;
