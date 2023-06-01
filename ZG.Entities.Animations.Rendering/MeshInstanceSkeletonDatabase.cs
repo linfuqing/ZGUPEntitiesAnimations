@@ -919,7 +919,7 @@ namespace ZG
                             break;
                     }
 
-                    if (j < floatChannels.Length)
+                    if (j < length)
                     {
                         outBlendShapeToRigIndexMapping.Add(new BlendShapeToRigIndexMapping
                         {
