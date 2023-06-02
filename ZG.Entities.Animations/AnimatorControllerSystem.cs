@@ -9,6 +9,7 @@ using Unity.Entities;
 using Unity.Entities.LowLevel.Unsafe;
 using Unity.Animation;
 using Math = ZG.Mathematics.Math;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace ZG
 {
@@ -1039,7 +1040,7 @@ namespace ZG
                 }
             }
 
-            public readonly bool Judge(in NativeParallelHashSet<int> triggerIndices, in DynamicBuffer<AnimatorControllerParameter> values, ref BlobArray<Parameter> keys)
+            public readonly bool Judge(in UnsafeHashSet<int> triggerIndices, in DynamicBuffer<AnimatorControllerParameter> values, ref BlobArray<Parameter> keys)
             {
                 if (parameterIndex >= keys.Length)
                     return false;
@@ -1076,7 +1077,7 @@ namespace ZG
             public readonly bool canTransitionToSelf => (flag & AnimatorControllerTransitionFlag.CanTransitionToSelf) == AnimatorControllerTransitionFlag.CanTransitionToSelf;
 
             public bool Judge(
-                in NativeParallelHashSet<int> paramterTriggerIndices, 
+                in UnsafeHashSet<int> paramterTriggerIndices, 
                 in DynamicBuffer<AnimatorControllerParameter> paramterValues,
                 ref BlobArray<Parameter> parameterKeys)
             {
@@ -1095,7 +1096,7 @@ namespace ZG
                 float averageMotionLength, 
                 float previousTime, 
                 float currentTime,
-                in NativeParallelHashSet<int> paramterTriggerIndices, 
+                in UnsafeHashSet<int> paramterTriggerIndices, 
                 in DynamicBuffer<AnimatorControllerParameter> paramterValues,
                 ref BlobArray<Parameter> parameterKeys)
             {
@@ -1120,7 +1121,7 @@ namespace ZG
                 return true;
             }
 
-            public void CollectParameterTriggers(ref BlobArray<Parameter> parameters, ref NativeParallelHashSet<int> triggerIndices)
+            public void CollectParameterTriggers(ref BlobArray<Parameter> parameters, ref UnsafeHashSet<int> triggerIndices)
             {
                 int numConditions = conditions.Length;
                 for (int i = 0; i < numConditions; i++)
@@ -1130,7 +1131,7 @@ namespace ZG
                     if (parameters[condition.parameterIndex].type == AnimatorControllerParameterType.Trigger)
                     {
                         if (!triggerIndices.IsCreated)
-                            triggerIndices = new NativeParallelHashSet<int>(1, Allocator.Temp);
+                            triggerIndices = new UnsafeHashSet<int>(1, Allocator.Temp);
 
                         triggerIndices.Add(condition.parameterIndex);
                     }
@@ -1248,7 +1249,7 @@ namespace ZG
             float destinationPreviousStateTime,
             in DynamicBuffer<AnimatorControllerParameter> parameterValues,
             ref BlobArray<Parameter> parameterKeys,
-            ref NativeParallelHashSet<int> parameterTriggerIndices, 
+            ref UnsafeHashSet<int> parameterTriggerIndices, 
             ref Transition transition,
             ref State sourceState,
             ref State destinationState,
@@ -1332,7 +1333,7 @@ namespace ZG
         public bool Evaluate(
             float deltaTime,
             in DynamicBuffer<AnimatorControllerParameter> parameters, 
-            ref NativeParallelHashSet<int> parameterTriggerIndices, 
+            ref UnsafeHashSet<int> parameterTriggerIndices, 
             ref AnimatorControllerState state, 
             ref StateMachine stateMachine)
         {
@@ -1342,7 +1343,7 @@ namespace ZG
             //layerState.flag &= ~AnimatorControllerLayerState.Flag.UpdateFlags;
 
             //MotionClipWrapMode sourceWrapMode;
-            int i, numTransitions;
+            int i, numTransitions, sourceParameterTriggerIndexCount, destinationParameterTriggerIndexCount;
             float averageMotionLength, duration;//, sourceAverageMotionLength;
             do
             {
@@ -1413,6 +1414,7 @@ namespace ZG
                     duration = GetDuration(ref activeTransition, ref sourceState, parameters);
                     if (duration > state.transitionTime)
                     {
+                        sourceParameterTriggerIndexCount = parameterTriggerIndices.IsCreated ? parameterTriggerIndices.Count : 0;
                         if (EvaluateInterruptTransitions(
                             sourceState.wrapMode,
                             destinationState.wrapMode,
@@ -1430,7 +1432,9 @@ namespace ZG
                         {
                             //state.sourceStateTime = math.max(state.sourceStateTime - deltaTime, state.preSourceStateTime);
 
-                            continue;
+                            destinationParameterTriggerIndexCount = parameterTriggerIndices.IsCreated ? parameterTriggerIndices.Count : 0;
+                            if(destinationParameterTriggerIndexCount > sourceParameterTriggerIndexCount)
+                                continue;
                         }
                     }
                     else
@@ -1481,7 +1485,7 @@ namespace ZG
             outTimes.Clear();
             outWeights.Clear();
 
-            NativeParallelHashSet<int> parameterTriggerIndices = default;
+            UnsafeHashSet<int> parameterTriggerIndices = default;
             float transitionNormalizedTime, stateWeight;
             int numStateMotionIndices, numLayers = math.min(layers.IsCreated ? layers.Length : 0, this.layers.Length);
             for (int i = 0; i < numLayers; ++i)
