@@ -330,7 +330,7 @@ namespace ZG
 
                 var lodGroups = rendererRoot.GetComponentsInChildren<LODGroup>();
                 if (lodGroups != null)
-                    MeshInstanceRendererDatabase.Data.Build(lodGroups, rendererLODCounts);
+                    MeshInstanceRendererDatabase.Build(lodGroups, rendererLODCounts);
 
                 Create(
                     isRoot,

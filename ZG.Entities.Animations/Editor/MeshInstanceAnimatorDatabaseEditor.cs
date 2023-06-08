@@ -10,6 +10,7 @@ namespace ZG
         private bool __foldout;
 
         [MenuItem("Assets/ZG/MeshInstance/Rebuild All Animators")]
+        [CommandEditor("MeshInstance", 1)]
         public static void RebuildAllAnimators()
         {
             MeshInstanceAnimatorDatabase target;

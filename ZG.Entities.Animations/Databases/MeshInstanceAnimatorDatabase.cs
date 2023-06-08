@@ -1133,7 +1133,14 @@ namespace ZG
                     rigs.Add(rig);
                 }
 
-                MeshInstanceClipDatabase.Create(this, rigs.ToArray(), animations, animationClipIndices, ref rigDatabase.data.rigs, ref _clipData);
+                MeshInstanceClipDatabase.Create(
+                    this, 
+                    rigs.ToArray(),
+                    rigDatabase.materialPropertySettings == null ? null : rigDatabase.materialPropertySettings.Override,
+                    animations, 
+                    animationClipIndices, 
+                    ref rigDatabase.data.rigs, 
+                    ref _clipData);
 
                 var rigRemapTables = new NativeList<BlobAssetReference<RigRemapTable>>(Allocator.Temp);
                 _clipData.ToAsset(GetInstanceID(), rigDatabase.data.rigs, ref rigRemapTables, out var factory, out clipDefinition);

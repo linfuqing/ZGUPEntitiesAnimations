@@ -17,6 +17,15 @@ using UnityEditor;
 namespace ZG
 {
 #if UNITY_EDITOR
+    [ComponentBindingProcessor(typeof(MeshRenderer))]
+    internal class MeshRendererBindingProcessor : ComponentBindingProcessor<MeshRenderer>
+    {
+        protected override ChannelBindType Process(EditorCurveBinding binding)
+        {
+            return ChannelBindType.Float;
+        }
+    }
+
     public struct MeshInstanceClipEvent
     {
         public string type;
@@ -1587,7 +1596,8 @@ namespace ZG
 
         public static Data Create(
             UnityEngine.Object asset, 
-            RigData[] rigs, 
+            RigData[] rigs,
+            MeshInstanceRendererDatabase.MaterialPropertyOverride materialPropertyOverride, 
             List<MeshInstanceRigDatabase.Rig> results,
             List<BlobAssetReference<Unity.Animation.Clip>> outAnimations, 
             Dictionary<AnimationData, int> outAnimationClipIndices)
@@ -1749,7 +1759,8 @@ namespace ZG
                                                 false, 
                                                 AssetDatabase.LoadAssetAtPath<GameObject>(string.IsNullOrEmpty(newAvatarAssetPath) ? newAssetPath : newAvatarAssetPath), 
                                                 null, 
-                                                null)[0];
+                                                null,
+                                                materialPropertyOverride)[0];
 
                                             dataRig.avatar = avatar;
 
@@ -1970,6 +1981,7 @@ namespace ZG
         public static void Create(
             UnityEngine.Object asset,
             RigData[] dataRigs,
+            MeshInstanceRendererDatabase.MaterialPropertyOverride materialPropertyOverride,
             List<BlobAssetReference<Unity.Animation.Clip>> outAnimations,
             Dictionary<AnimationData, int> outAnimationClipIndices,
             ref MeshInstanceRigDatabase.Rig[] rigs, 
@@ -1993,7 +2005,13 @@ namespace ZG
                 results.Add(rigs[i]);
             }
 
-            data = Create(asset, dataRigs, results, outAnimations, outAnimationClipIndices);
+            data = Create(
+                asset, 
+                dataRigs,
+                materialPropertyOverride, 
+                results, 
+                outAnimations, 
+                outAnimationClipIndices);
 
             rigs = results.ToArray();
         }
@@ -2032,7 +2050,14 @@ namespace ZG
 
             var animations = new List<BlobAssetReference<Unity.Animation.Clip>>();
 
-            Create(this, rigs.ToArray(), animations, null, ref rigDatabase.data.rigs, ref data);
+            Create(
+                this, 
+                rigs.ToArray(),
+                rigDatabase.materialPropertySettings == null ? null : rigDatabase.materialPropertySettings.Override,
+                animations, 
+                null, 
+                ref rigDatabase.data.rigs, 
+                ref data);
 
             __clips = animations.ToArray();
         }

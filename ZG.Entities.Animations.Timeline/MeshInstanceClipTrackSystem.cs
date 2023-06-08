@@ -9,7 +9,12 @@ using Unity.Transforms;
 
 namespace ZG
 {
-    public struct MeshInstanceClipTrack : IBufferElementData, IEnableableComponent
+    public struct MeshInstanceClipTrackMask : ICleanupComponentData
+    {
+
+    }
+
+    public struct MeshInstanceClipTrack : IBufferElementData
     {
         public int rigIndex;
         public int clipIndex;
@@ -27,6 +32,26 @@ namespace ZG
         UpdateAfter(typeof(MeshInstanceClipCommandSystem))]
     public partial struct MeshInstanceClipTrackSystem : ISystem
     {
+        [BurstCompile]
+        private struct Collect : IJobChunk
+        {
+            [ReadOnly]
+            public BufferTypeHandle<MeshInstanceRig> rigType;
+
+            public NativeList<Entity> entities;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+            {
+                if (!chunk.Has(ref rigType))
+                    return;
+
+                var rigs = chunk.GetBufferAccessor(ref rigType);
+                var iterator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (iterator.NextEntityIndex(out int i))
+                    entities.AddRange(rigs[i].AsNativeArray().Reinterpret<Entity>());
+            }
+        }
+
         private struct Evaluate
         {
             [ReadOnly]
@@ -248,6 +273,8 @@ namespace ZG
             }
         }
 
+        private EntityQuery __groupToCreate;
+        private EntityQuery __groupToDestroy;
         private EntityQuery __group;
 
         private ComponentTypeHandle<MeshInstanceRigID> __rigIDType;
@@ -274,6 +301,20 @@ namespace ZG
 
         public void OnCreate(ref SystemState state)
         {
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __groupToCreate = builder
+                        .WithAll<MeshInstanceRig, MeshInstanceRigID, MeshInstanceClipTrack>()
+                        .WithNone<MeshInstanceClipTrackMask>()
+                        .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                        .Build(ref state);
+
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __groupToDestroy = builder
+                        .WithAll<MeshInstanceClipTrackMask>()
+                        .WithNone<MeshInstanceClipTrack>()
+                        .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                        .Build(ref state);
+
             using (var builder = new EntityQueryBuilder(Allocator.Temp))
                 __group = builder
                         .WithAll<MeshInstanceRig, MeshInstanceRigID, MeshInstanceClipTrack>()
@@ -307,6 +348,39 @@ namespace ZG
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            var entityManager = state.EntityManager;
+            if (!__groupToCreate.IsEmpty)
+            {
+                using (var entities = new NativeList<Entity>(Allocator.TempJob))
+                {
+                    Collect collect;
+                    collect.rigType = __rigType.UpdateAsRef(ref state);
+                    collect.entities = entities;
+
+                    collect.RunByRef(__groupToCreate);
+
+                    entityManager.AddComponent<MeshInstanceClipTrackMask>(__groupToCreate);
+
+                    entityManager.AddComponent<DisableRootTransformReadWriteTag>(entities.AsArray());
+                }
+            }
+
+            if (!__groupToDestroy.IsEmpty)
+            {
+                using (var entities = new NativeList<Entity>(Allocator.TempJob))
+                {
+                    Collect collect;
+                    collect.rigType = __rigType.UpdateAsRef(ref state);
+                    collect.entities = entities;
+
+                    collect.RunByRef(__groupToDestroy);
+
+                    entityManager.RemoveComponent<MeshInstanceClipTrackMask>(__groupToDestroy);
+
+                    entityManager.RemoveComponent<DisableRootTransformReadWriteTag>(entities.AsArray());
+                }
+            }
+
             EvaluateEx evaluate;
             evaluate.clips = __clips.reader;
             evaluate.rigDefinitions = __rigDefinitions.reader;

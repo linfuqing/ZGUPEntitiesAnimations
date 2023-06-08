@@ -7,7 +7,8 @@ namespace ZG
     public class MeshInstanceRigDatabaseEditor : Editor
     {
         [MenuItem("Assets/ZG/MeshInstance/Rebuild All Rigs")]
-        public static void RebuildAllRenderers()
+        [CommandEditor("MeshInstance", 0)]
+        public static void RebuildAllRigs()
         {
             MeshInstanceRigDatabase target;
             var guids = AssetDatabase.FindAssets("t:MeshInstanceRigDatabase");

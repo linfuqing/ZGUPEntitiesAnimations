@@ -340,7 +340,7 @@ namespace ZG
             Data.Build(rendererRoot.root, rigDatabase.data.nodes, rigNodeIndices);
 
             var rendererLODCounts = new Dictionary<Renderer, int>();
-            MeshInstanceRendererDatabase.Data.Build(rendererRoot.GetComponentsInChildren<LODGroup>(), rendererLODCounts);
+            MeshInstanceRendererDatabase.Build(rendererRoot.GetComponentsInChildren<LODGroup>(), rendererLODCounts);
 
             var transformRenderGroups = new Dictionary<UnityEngine.Transform, Data.RenderGroup>();
             Data.Build(rendererLODCounts, transformRenderGroups, rendererRoot.GetComponentsInChildren<Renderer>());

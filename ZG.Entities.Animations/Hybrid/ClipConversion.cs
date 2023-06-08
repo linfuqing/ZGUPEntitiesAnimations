@@ -148,7 +148,10 @@ namespace Unity.Animation.Hybrid
 
             var arrayBuilder = blobBuilder.Allocate(ref blobBuffer, bindings.Count);
             for (var i = 0; i != bindings.Count; ++i)
+            {
+                //UnityEngine.Debug.LogError($"Clip {ClipBuilderUtils.ToGenericBindingID(bindings[i]).ID} To {hasher.ToHash(ClipBuilderUtils.ToGenericBindingID(bindings[i]))}");
                 arrayBuilder[i] = hasher.ToHash(ClipBuilderUtils.ToGenericBindingID(bindings[i]));
+            }
         }
 
         private static void FillCurves(AnimationClip sourceClip, IReadOnlyList<EditorCurveBinding> translationBindings,

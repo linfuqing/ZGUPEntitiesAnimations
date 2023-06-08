@@ -87,6 +87,7 @@ namespace ZG
         }
 
         [MenuItem("Assets/ZG/MeshInstance/Rebuild All Skeletons")]
+        [CommandEditor("MeshInstance", 1)]
         public static void RebuildAllSkeletons()
         {
             MeshInstanceSkeletonDatabase target;

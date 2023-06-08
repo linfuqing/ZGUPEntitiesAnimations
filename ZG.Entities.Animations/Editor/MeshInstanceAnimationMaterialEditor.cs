@@ -1,26 +1,26 @@
-using UnityEngine;
 using UnityEditor;
+using UnityEngine;
 
 namespace ZG
 {
-    [CustomEditor(typeof(MeshInstanceClipDatabase))]
-    public class MeshInstanceClipDatabaseEditor : Editor
+    [CustomEditor(typeof(MeshInstanceAnimationMaterialDatabase))]
+    public class MeshInstanceAnimationMaterialEditor : Editor
     {
-        [MenuItem("Assets/ZG/MeshInstance/Rebuild All Clips")]
+        [MenuItem("Assets/ZG/MeshInstance/Rebuild All Animation Materials")]
         [CommandEditor("MeshInstance", 1)]
-        public static void RebuildAllClips()
+        public static void RebuildAllAnimationMaterials()
         {
-            MeshInstanceClipDatabase target;
-            var guids = AssetDatabase.FindAssets("t:MeshInstanceClipDatabase");
+            MeshInstanceAnimationMaterialDatabase target;
+            var guids = AssetDatabase.FindAssets("t:MeshInstanceAnimationMaterialDatabase");
             string path;
             int numGUIDs = guids.Length;
             for (int i = 0; i < numGUIDs; ++i)
             {
                 path = AssetDatabase.GUIDToAssetPath(guids[i]);
-                if (EditorUtility.DisplayCancelableProgressBar("Rebuild All Clips", path, i * 1.0f / numGUIDs))
+                if (EditorUtility.DisplayCancelableProgressBar("Rebuild All Rigs", path, i * 1.0f / numGUIDs))
                     break;
 
-                target = AssetDatabase.LoadAssetAtPath<MeshInstanceClipDatabase>(path);
+                target = AssetDatabase.LoadAssetAtPath<MeshInstanceAnimationMaterialDatabase>(path);
                 if (target == null)
                     continue;
 
@@ -30,8 +30,6 @@ namespace ZG
 
                     continue;
                 }
-
-                MeshInstanceClipDatabase.Data.isShowProgressBar = false;
 
                 target.Create();
 
@@ -43,9 +41,7 @@ namespace ZG
 
         public override void OnInspectorGUI()
         {
-            var target = (MeshInstanceClipDatabase)base.target;
-
-            bool isRebuild = false;
+            var target = (MeshInstanceAnimationMaterialDatabase)base.target;
 
             EditorGUI.BeginChangeCheck();
             target.root = EditorGUILayout.ObjectField("Root", target.root, typeof(Transform), true) as Transform;
@@ -55,14 +51,15 @@ namespace ZG
                     target.Create();
 
                 if (PrefabUtility.GetPrefabInstanceStatus(target.root) == PrefabInstanceStatus.Connected)
-                    target.root = PrefabUtility.GetCorrespondingObjectFromSource(target.root);
+                {
+                    /*if (PrefabUtility.GetPrefabAssetType(target.root) == PrefabAssetType.Model)
+                        target.root = (Transform)PrefabUtility.GetPrefabInstanceHandle(target.root);
+                    else*/
+                        target.root = PrefabUtility.GetCorrespondingObjectFromSource(target.root);
+                }
 
-                isRebuild = true;
-            }
-
-            isRebuild = GUILayout.Button("Reset") || isRebuild;
-            if(isRebuild)
                 target.EditorMaskDirty();
+            }
 
             base.OnInspectorGUI();
         }

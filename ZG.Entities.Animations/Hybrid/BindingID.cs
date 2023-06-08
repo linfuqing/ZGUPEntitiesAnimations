@@ -154,6 +154,8 @@ namespace Unity.Animation.Hybrid
 
         private static readonly string[] k_Suffixes = new[] {"x", "y", "z", "w"};
 
+        private static readonly string[] k_ColorSuffixes = new[] { "r", "g", "b", "a" };
+
         /// <summary>
         /// Type of component.
         /// </summary>
@@ -183,6 +185,20 @@ namespace Unity.Animation.Hybrid
                     ValueType = (GenericPropertyType)ChannelType
                 };
             }
+        }
+
+        public GenericBindingID GetColor(int index)
+        {
+            if ((uint)index >= 4)
+                throw new System.ArgumentException("index must be between[0...3]");
+
+            return new GenericBindingID
+            {
+                Path = Path,
+                AttributeName = $"{AttributeName}.{k_ColorSuffixes[index]}",
+                ComponentType = ComponentType,
+                ValueType = (GenericPropertyType)ChannelType
+            };
         }
 
         /// <summary>
