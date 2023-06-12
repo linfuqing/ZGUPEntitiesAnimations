@@ -192,7 +192,7 @@ namespace ZG
                 DynamicBuffer<MeshInstanceRig> instanceRigs;
                 if (index < this.instanceRigs.Length)
                     instanceRigs = this.instanceRigs[index];
-                else
+                else if (index < this.entityParents.Length)
                 {
                     Entity rigEntity = EntityParent.Get(entityParents[index], instanceRigMap);
                     if (rigEntity == Entity.Null)
@@ -200,6 +200,8 @@ namespace ZG
 
                     instanceRigs = instanceRigMap[rigEntity];
                 }
+                else
+                    return;
 
                 instances[index].definition.Value.Apply(
                     ref entityManager,
@@ -297,7 +299,7 @@ namespace ZG
         {
             using (var builder = new EntityQueryBuilder(Allocator.Temp))
                 __group = builder
-                    .WithAll<MeshInstanceAnimationMaterialData, MeshInstanceRig, MeshInstanceNode>()
+                    .WithAll<MeshInstanceAnimationMaterialData, MeshInstanceNode>()
                     .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
                     .Build(ref state);
 
