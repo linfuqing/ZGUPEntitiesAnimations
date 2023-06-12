@@ -1040,7 +1040,7 @@ namespace ZG
                 }
             }
 
-            public readonly bool Judge(in UnsafeHashSet<int> triggerIndices, in DynamicBuffer<AnimatorControllerParameter> values, ref BlobArray<Parameter> keys)
+            public readonly bool Judge(/*in UnsafeHashSet<int> triggerIndices, */in DynamicBuffer<AnimatorControllerParameter> values, ref BlobArray<Parameter> keys)
             {
                 if (parameterIndex >= keys.Length)
                     return false;
@@ -1050,8 +1050,8 @@ namespace ZG
                 {
                     case AnimatorControllerParameterType.Float:
                         return Judge(key.GetFloat(parameterIndex, values));
-                    case AnimatorControllerParameterType.Trigger:
-                        return Judge(triggerIndices.IsCreated && triggerIndices.Contains(parameterIndex) ? 0 : key.GetInt(parameterIndex, values));
+                    /*case AnimatorControllerParameterType.Trigger:
+                        return Judge(triggerIndices.IsCreated && triggerIndices.Contains(parameterIndex) ? 0 : key.GetInt(parameterIndex, values));*/
                     default:
                         return Judge(key.GetInt(parameterIndex, values));
                 }
@@ -1077,14 +1077,14 @@ namespace ZG
             public readonly bool canTransitionToSelf => (flag & AnimatorControllerTransitionFlag.CanTransitionToSelf) == AnimatorControllerTransitionFlag.CanTransitionToSelf;
 
             public bool Judge(
-                in UnsafeHashSet<int> paramterTriggerIndices, 
+                //in UnsafeHashSet<int> paramterTriggerIndices, 
                 in DynamicBuffer<AnimatorControllerParameter> paramterValues,
                 ref BlobArray<Parameter> parameterKeys)
             {
                 int numConditions = conditions.Length;
                 for (int i = 0; i < numConditions; i++)
                 {
-                    if (!conditions[i].Judge(paramterTriggerIndices, paramterValues, ref parameterKeys))
+                    if (!conditions[i].Judge(/*paramterTriggerIndices, */paramterValues, ref parameterKeys))
                         return false;
                 }
 
@@ -1096,11 +1096,11 @@ namespace ZG
                 float averageMotionLength, 
                 float previousTime, 
                 float currentTime,
-                in UnsafeHashSet<int> paramterTriggerIndices, 
+                //in UnsafeHashSet<int> paramterTriggerIndices, 
                 in DynamicBuffer<AnimatorControllerParameter> paramterValues,
                 ref BlobArray<Parameter> parameterKeys)
             {
-                if (!Judge(paramterTriggerIndices, paramterValues, ref parameterKeys))
+                if (!Judge(/*paramterTriggerIndices, */paramterValues, ref parameterKeys))
                     return false;
 
                 if (exitTime > math.FLT_MIN_NORMAL)
@@ -1275,7 +1275,7 @@ namespace ZG
                         sourceStateMotionLength,
                         sourcePreviousStateTime,
                         state.sourceStateTime, 
-                        parameterTriggerIndices, 
+                        //parameterTriggerIndices, 
                         parameterValues,
                         ref parameterKeys))
                     {
@@ -1306,7 +1306,7 @@ namespace ZG
                             destinationStateMotionLength,
                             destinationPreviousStateTime,
                             state.destinationStateTime,
-                            parameterTriggerIndices,
+                            //parameterTriggerIndices,
                             parameterValues,
                             ref parameterKeys))
                         {
@@ -1363,7 +1363,7 @@ namespace ZG
                         transition.destinationStateIndex == state.sourceStateIndex))
                         continue;
 
-                    if (!transition.Judge(parameterTriggerIndices, parameters, ref this.parameters))
+                    if (!transition.Judge(/*parameterTriggerIndices, */parameters, ref this.parameters))
                         continue;
 
                     transition.CollectParameterTriggers(ref this.parameters, ref parameterTriggerIndices);
@@ -1387,7 +1387,7 @@ namespace ZG
                             sourceState.motionAverageLength,
                             state.preSourceStateTime,
                             state.sourceStateTime,
-                            parameterTriggerIndices,
+                            //parameterTriggerIndices,
                             parameters,
                             ref this.parameters))
                         {
@@ -1827,15 +1827,21 @@ namespace ZG
         private BufferTypeHandle<MotionClipTime> __clipTimeType;
         private BufferTypeHandle<MotionClipWeight> __clipWeightType;
 
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            __group = state.GetEntityQuery(
-                ComponentType.ReadOnly<AnimatorControllerData>(),
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __group = builder
+                        .WithAll<AnimatorControllerData>()
+                        .WithAllRW<AnimatorControllerStateMachine, AnimatorControllerParameter>()
+                        .WithAllRW<MotionClip, MotionClipWeight>()
+                        .Build(ref state);
+                /*ComponentType.ReadOnly<AnimatorControllerData>(),
                 ComponentType.ReadWrite<AnimatorControllerStateMachine>(),
                 ComponentType.ReadWrite<AnimatorControllerParameter>(),
                 ComponentType.ReadWrite<MotionClip>(),
                 //ComponentType.ReadWrite<MotionClipTime>(),
-                ComponentType.ReadWrite<MotionClipWeight>());
+                ComponentType.ReadWrite<MotionClipWeight>());*/
 
             __motions = SingletonAssetContainer<UnsafeUntypedBlobAssetReference>.instance;
             __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.instance;
@@ -1856,6 +1862,7 @@ namespace ZG
             __clipWeightType = state.GetBufferTypeHandle<MotionClipWeight>();
         }
 
+        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
         }

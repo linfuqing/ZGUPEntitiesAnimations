@@ -159,6 +159,9 @@ namespace ZG
             public BufferLookup<AnimatedData> animations;
 
             [ReadOnly]
+            public BufferLookup<MeshInstanceRig> instanceRigMap;
+
+            [ReadOnly]
             public ComponentLookup<Rig> rigs;
 
             [ReadOnly]
@@ -174,6 +177,9 @@ namespace ZG
             public BufferAccessor<MeshInstanceNode> instanceRenderers;
 
             [ReadOnly]
+            public BufferAccessor<EntityParent> entityParents;
+
+            [ReadOnly]
             public SharedHashMap<Entity, MeshInstanceRendererBuilder>.Reader rendererBuilders;
 
             public EntityComponentAssigner.ParallelWriter entityManager;
@@ -183,12 +189,24 @@ namespace ZG
                 if (rendererBuilders.ContainsKey(entityArray[index]))
                     return;
 
+                DynamicBuffer<MeshInstanceRig> instanceRigs;
+                if (index < this.instanceRigs.Length)
+                    instanceRigs = this.instanceRigs[index];
+                else
+                {
+                    Entity rigEntity = EntityParent.Get(entityParents[index], instanceRigMap);
+                    if (rigEntity == Entity.Null)
+                        return;
+
+                    instanceRigs = instanceRigMap[rigEntity];
+                }
+
                 instances[index].definition.Value.Apply(
                     ref entityManager,
                     typeIndices,
                     animations,
                     rigs,
-                    instanceRigs[index].Reinterpret<Entity>().AsNativeArray(),
+                    instanceRigs.Reinterpret<Entity>().AsNativeArray(),
                     instanceRenderers[index].Reinterpret<Entity>().AsNativeArray());
             }
         }
@@ -201,6 +219,9 @@ namespace ZG
 
             [ReadOnly]
             public BufferLookup<AnimatedData> animations;
+
+            [ReadOnly]
+            public BufferLookup<MeshInstanceRig> instanceRigs;
 
             [ReadOnly]
             public ComponentLookup<Rig> rigs;
@@ -218,6 +239,9 @@ namespace ZG
             public BufferTypeHandle<MeshInstanceNode> instanceRendererType;
 
             [ReadOnly]
+            public BufferTypeHandle<EntityParent> entityParentType;
+
+            [ReadOnly]
             public SharedHashMap<Entity, MeshInstanceRendererBuilder>.Reader rendererBuilders;
 
             public EntityComponentAssigner.ParallelWriter entityManager;
@@ -227,11 +251,13 @@ namespace ZG
                 Apply apply;
                 apply.typeIndices = typeIndices;
                 apply.animations = animations;
+                apply.instanceRigMap = instanceRigs;
                 apply.rigs = rigs;
                 apply.entityArray = chunk.GetNativeArray(entityType);
                 apply.instances = chunk.GetNativeArray(ref instanceType);
                 apply.instanceRigs = chunk.GetBufferAccessor(ref instanceRigType);
                 apply.instanceRenderers = chunk.GetBufferAccessor(ref instanceRendererType);
+                apply.entityParents = chunk.GetBufferAccessor(ref entityParentType);
                 apply.rendererBuilders = rendererBuilders;
                 apply.entityManager = entityManager;
 
@@ -245,6 +271,8 @@ namespace ZG
 
         private BufferLookup<AnimatedData> __animations;
 
+        private BufferLookup<MeshInstanceRig> __instanceRigs;
+
         private ComponentLookup<Rig> __rigs;
 
         private EntityTypeHandle __entityType;
@@ -254,6 +282,8 @@ namespace ZG
         private BufferTypeHandle<MeshInstanceRig> __instanceRigType;
 
         private BufferTypeHandle<MeshInstanceNode> __instanceRendererType;
+
+        private BufferTypeHandle<EntityParent> __entityParentType;
 
         private EntityComponentAssigner __assigner;
 
@@ -272,10 +302,12 @@ namespace ZG
                     .Build(ref state);
 
             __animations = state.GetBufferLookup<AnimatedData>(true);
+            __instanceRigs = state.GetBufferLookup<MeshInstanceRig>(true);
             __rigs = state.GetComponentLookup<Rig>(true);
             __instanceType = state.GetComponentTypeHandle<MeshInstanceAnimationMaterialData>(true);
             __instanceRigType = state.GetBufferTypeHandle<MeshInstanceRig>(true);
             __instanceRendererType = state.GetBufferTypeHandle<MeshInstanceNode>(true);
+            __entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
 
             __assigner = state.WorldUnmanaged.GetExistingSystemUnmanaged<MeshInstanceRigStructChangeSystem>().assigner;
 
@@ -309,10 +341,12 @@ namespace ZG
             apply.typeIndices = __typeIndcies.reader;
             apply.entityType = __entityType.UpdateAsRef(ref state);
             apply.animations = __animations.UpdateAsRef(ref state);
+            apply.instanceRigs = __instanceRigs.UpdateAsRef(ref state);
             apply.rigs = __rigs.UpdateAsRef(ref state);
             apply.instanceType = instanceType;
             apply.instanceRigType = __instanceRigType.UpdateAsRef(ref state);
             apply.instanceRendererType = __instanceRendererType.UpdateAsRef(ref state);
+            apply.entityParentType = __entityParentType.UpdateAsRef(ref state);
             apply.rendererBuilders = __rendererBuilders.reader;
             apply.entityManager = __assigner.AsParallelWriter(__typeCountAndBufferSize, ref jobHandle);
 
