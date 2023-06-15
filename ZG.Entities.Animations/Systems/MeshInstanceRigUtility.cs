@@ -26,12 +26,12 @@ namespace ZG
 
     public struct MeshInstanceRigDefinition
     {
-        public struct Renderer
+        /*public struct Renderer
         {
             public int nodeIndex;
 
             public float4x4 offset;
-        }
+        }*/
 
         public struct Node
         {

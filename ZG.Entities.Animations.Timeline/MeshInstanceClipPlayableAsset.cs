@@ -5,6 +5,8 @@ namespace ZG
 {
     public class MeshInstanceClipPlayableAsset : PlayableAsset
     {
+        public bool useOriginTransform;
+
         public int clipIndex;
 
         public int rigIndex;
@@ -32,7 +34,7 @@ namespace ZG
             var behaviour = playable.GetBehaviour();
             behaviour._clipIndex = clipIndex;
             behaviour._rigIndex = rigIndex;
-            behaviour._matrix = Matrix4x4.TRS(position, rotation, scale);
+            behaviour._matrix = useOriginTransform ? default : Matrix4x4.TRS(position, rotation, scale);
             behaviour._factory = database.factory;
             behaviour._definition = database.definition;//.Resolve(graph.GetResolver()).GetControllerDefinition(animatorControllerIndex);
 
