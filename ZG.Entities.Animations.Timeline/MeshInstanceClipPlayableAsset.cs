@@ -11,6 +11,8 @@ namespace ZG
 
         public int rigIndex;
 
+        public float speed = 1.0f;
+
         public MeshInstanceClipDatabase database;
 
         public Vector3 scale = Vector3.one;
@@ -34,6 +36,8 @@ namespace ZG
             var behaviour = playable.GetBehaviour();
             behaviour._clipIndex = clipIndex;
             behaviour._rigIndex = rigIndex;
+            behaviour._duration = (float)duration;
+            behaviour._speed = speed;
             behaviour._matrix = useOriginTransform ? default : Matrix4x4.TRS(position, rotation, scale);
             behaviour._factory = database.factory;
             behaviour._definition = database.definition;//.Resolve(graph.GetResolver()).GetControllerDefinition(animatorControllerIndex);

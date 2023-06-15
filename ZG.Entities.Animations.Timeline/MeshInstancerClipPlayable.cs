@@ -1,5 +1,6 @@
 using Unity.Entities;
 using Unity.Mathematics;
+using UnityEngine;
 using UnityEngine.Playables;
 
 namespace ZG
@@ -8,6 +9,10 @@ namespace ZG
     {
         internal int _clipIndex;
         internal int _rigIndex;
+
+        internal float _duration;
+
+        internal float _speed;
 
         internal float4x4 _matrix;
 
@@ -20,7 +25,7 @@ namespace ZG
             track.clipIndex = _clipIndex;
             track.rigIndex = _rigIndex;
             track.weight = weight;
-            track.time = (float)playable.GetTime();
+            track.time = Mathf.Repeat((float)playable.GetTime() * _speed, _duration);
             track.matrix = _matrix;
             track.factory = _factory;
             track.definition = _definition;
