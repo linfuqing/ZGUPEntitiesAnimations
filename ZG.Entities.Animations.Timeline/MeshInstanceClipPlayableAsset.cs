@@ -26,7 +26,7 @@ namespace ZG
                 if (database == null)
                     return base.duration;
 
-                return database.GetClip(database.factory.Value.rigs[rigIndex].clipIndices[clipIndex]).Value.Duration;
+                return database.GetClip(database.factory.Value.rigs[rigIndex].clipIndices[clipIndex]).Value.Duration / Mathf.Abs(speed);
             }
         }
 
