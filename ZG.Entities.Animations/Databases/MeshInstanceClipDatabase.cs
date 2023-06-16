@@ -9,8 +9,7 @@ using Unity.Animation.Hybrid;
 using UnityEngine;
 
 #if UNITY_EDITOR
-using System.Reflection;
-using System.Text;
+using System.Linq;
 using UnityEditor;
 #endif
 
@@ -1597,7 +1596,8 @@ namespace ZG
         public static Data Create(
             UnityEngine.Object asset, 
             RigData[] rigs,
-            MeshInstanceRendererDatabase.MaterialPropertyOverride materialPropertyOverride, 
+            MeshInstanceRendererDatabase.MaterialPropertyOverride materialPropertyOverride,
+            HashSet<int> rigIndicesToReplace,
             List<MeshInstanceRigDatabase.Rig> results,
             List<BlobAssetReference<Unity.Animation.Clip>> outAnimations, 
             Dictionary<AnimationData, int> outAnimationClipIndices)
@@ -1751,7 +1751,15 @@ namespace ZG
                                                 avatars.Add(avatar);
                                             }
 
-                                            remap.rigIndex = results.Count;
+                                            if (rigIndicesToReplace == null || rigIndicesToReplace.Count < 1)
+                                                remap.rigIndex = results.Count;
+                                            else
+                                            {
+                                                remap.rigIndex = rigIndicesToReplace.First();
+
+                                                rigIndicesToReplace.Remove(remap.rigIndex);
+                                            }
+
                                             //remap.databaseIndex = rigDatabases.Count;
                                             remaps.Add(remap);
 
@@ -1994,24 +2002,46 @@ namespace ZG
                     rigIndices.Add(remap.rigIndex);
             }
 
-            var results = new List<MeshInstanceRigDatabase.Rig>();
-
+            var results = new List<MeshInstanceRigDatabase.Rig>(rigs);
             int numRigs = rigs.Length;
             for(int i = 0; i < numRigs; ++i)
             {
-                if (rigIndices.Contains(i))
+                /*if (rigIndices.Contains(i))
                     continue;
 
-                results.Add(rigs[i]);
+                results.Add(rigs[i]);*/
+                if (!rigs[i].isCreated)
+                    rigIndices.Add(i);
             }
 
             data = Create(
                 asset, 
                 dataRigs,
-                materialPropertyOverride, 
+                materialPropertyOverride,
+                rigIndices,
                 results, 
                 outAnimations, 
                 outAnimationClipIndices);
+
+            int count = results.Count, destination = count - 1, source;
+            do
+            {
+                source = destination;
+                foreach (var rigIndex in rigIndices)
+                {
+                    if (destination == rigIndex)
+                        --destination;
+                }
+            } while (destination < source);
+
+            if(destination + 1 < count)
+                results.RemoveRange(destination, count - destination);
+
+            foreach (var rigIndex in rigIndices)
+            {
+                if (rigIndex < destination)
+                    results[rigIndex] = default;
+            }
 
             rigs = results.ToArray();
         }

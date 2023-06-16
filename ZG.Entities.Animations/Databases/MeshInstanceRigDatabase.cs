@@ -254,6 +254,14 @@ namespace ZG
                 stringBuilder.Append(name);
             }
 
+            public bool isCreated =>
+                skeletonNodes != null && skeletonNodes.Length > 0 ||
+                translationChannels != null && translationChannels.Length > 0 ||
+                rotationChannels != null && rotationChannels.Length > 0 ||
+                scaleChannels != null && scaleChannels.Length > 0 ||
+                floatChannels != null && floatChannels.Length > 0 ||
+                intChannels != null && intChannels.Length > 0;
+
             public int BoneIndexOf(string path)
             {
                 int numSkeletonNodes = skeletonNodes.Length;
