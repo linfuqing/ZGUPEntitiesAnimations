@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 
@@ -10,7 +9,7 @@ namespace ZG
         private bool __foldout;
 
         [MenuItem("Assets/ZG/MeshInstance/Rebuild All Animators")]
-        [CommandEditor("MeshInstance", 1)]
+        [CommandEditor("MeshInstance", 2)]
         public static void RebuildAllAnimators()
         {
             MeshInstanceAnimatorDatabase target;
@@ -34,11 +33,19 @@ namespace ZG
                     continue;
                 }
 
-                //MeshInstanceAnimatorDatabase.Data.isShowProgressBar = false;
+                try
+                {
 
-                target.Create();
+                    //MeshInstanceAnimatorDatabase.Data.isShowProgressBar = false;
 
-                target.EditorMaskDirty();
+                    target.Create();
+
+                    target.EditorMaskDirty();
+                }
+                catch(System.Exception e)
+                {
+                    Debug.LogException(e.InnerException ?? e);
+                }
             }
 
             EditorUtility.ClearProgressBar();

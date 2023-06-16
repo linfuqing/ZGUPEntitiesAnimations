@@ -111,10 +111,17 @@ namespace ZG
                     continue;
                 }
 
-                MeshInstanceSkeletonDatabase.Data.isShowProgressBar = false;
-                target.Create(target.rendererRoot);
+                try
+                {
+                    MeshInstanceSkeletonDatabase.Data.isShowProgressBar = false;
+                    target.Create(target.rendererRoot);
 
-                target.EditorMaskDirty();
+                    target.EditorMaskDirty();
+                }
+                catch(System.Exception e)
+                {
+                    Debug.LogException(e.InnerException ?? e, target);
+                }
             }
 
             EditorUtility.ClearProgressBar();

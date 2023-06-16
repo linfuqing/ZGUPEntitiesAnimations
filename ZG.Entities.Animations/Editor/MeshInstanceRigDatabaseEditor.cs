@@ -31,9 +31,17 @@ namespace ZG
                     continue;
                 }
 
-                target.Create();
 
-                target.EditorMaskDirty();
+                try
+                {
+                    target.Create();
+
+                    target.EditorMaskDirty();
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogException(e.InnerException ?? e);
+                }
             }
 
             EditorUtility.ClearProgressBar();
