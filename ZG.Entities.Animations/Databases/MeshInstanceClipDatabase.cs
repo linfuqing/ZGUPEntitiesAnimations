@@ -1999,15 +1999,18 @@ namespace ZG
             ref MeshInstanceRigDatabase.Rig[] rigs, 
             ref Data data)
         {
+            int numRigs = rigs.Length;
             var rigIndices = new HashSet<int>();
             if(data.remaps != null)
             {
-                foreach(var remap in data.remaps)
-                    rigIndices.Add(remap.rigIndex);
+                foreach (var remap in data.remaps)
+                {
+                    if(remap.rigIndex < numRigs)
+                        rigIndices.Add(remap.rigIndex);
+                }
             }
 
             var results = new List<MeshInstanceRigDatabase.Rig>(rigs);
-            int numRigs = rigs.Length;
             for(int i = 0; i < numRigs; ++i)
             {
                 /*if (rigIndices.Contains(i))
