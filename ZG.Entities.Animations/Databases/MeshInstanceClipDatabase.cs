@@ -1751,28 +1751,32 @@ namespace ZG
                                                 avatars.Add(avatar);
                                             }
 
-                                            if (rigIndicesToReplace == null || rigIndicesToReplace.Count < 1)
-                                                remap.rigIndex = results.Count;
-                                            else
-                                            {
-                                                remap.rigIndex = rigIndicesToReplace.First();
-
-                                                rigIndicesToReplace.Remove(remap.rigIndex);
-                                            }
-
-                                            //remap.databaseIndex = rigDatabases.Count;
-                                            remaps.Add(remap);
-
                                             var dataRig = MeshInstanceRigDatabase.CreateRigs(
-                                                false, 
-                                                AssetDatabase.LoadAssetAtPath<GameObject>(string.IsNullOrEmpty(newAvatarAssetPath) ? newAssetPath : newAvatarAssetPath), 
-                                                null, 
+                                                false,
+                                                AssetDatabase.LoadAssetAtPath<GameObject>(string.IsNullOrEmpty(newAvatarAssetPath) ? newAssetPath : newAvatarAssetPath),
+                                                null,
                                                 null,
                                                 materialPropertyOverride)[0];
 
                                             dataRig.avatar = avatar;
 
-                                            results.Add(dataRig);
+                                            if (rigIndicesToReplace == null || rigIndicesToReplace.Count < 1)
+                                            {
+                                                remap.rigIndex = results.Count;
+
+                                                results.Add(dataRig);
+                                            }
+                                            else
+                                            {
+                                                remap.rigIndex = rigIndicesToReplace.First();
+
+                                                rigIndicesToReplace.Remove(remap.rigIndex);
+
+                                                results[remap.rigIndex] = dataRig;
+                                            }
+
+                                            //remap.databaseIndex = rigDatabases.Count;
+                                            remaps.Add(remap);
                                         }
                                     }
                                     else
