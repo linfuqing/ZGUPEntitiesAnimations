@@ -27,10 +27,14 @@ namespace ZG
             track.weight = weight;
 
             track.time = (float)playable.GetTime() * _speed;
-            if ((_definition.Value.clips[_clipIndex].flag & MeshInstanceClipFlag.Looping) != MeshInstanceClipFlag.Looping)
+            if ((_definition.Value.clips[_clipIndex].flag & MeshInstanceClipFlag.Looping) == MeshInstanceClipFlag.Looping)
+                track.time = Mathf.Repeat(track.time, _duration);
+            else
+            {
                 track.time = Mathf.Clamp(track.time, -_duration, _duration);
-
-            track.time = Mathf.Repeat(track.time, _duration);
+                if (track.time < 0.0f)
+                    track.time = _duration + track.time;
+            }
 
             track.matrix = _matrix;
             track.factory = _factory;
