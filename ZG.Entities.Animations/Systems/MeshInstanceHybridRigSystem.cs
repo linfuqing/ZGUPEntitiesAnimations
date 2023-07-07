@@ -390,7 +390,7 @@ namespace ZG
                                 {
                                     transform = new EntityObject<Transform>(temp);
 
-                                    transform.Retain();
+                                    //transform.Retain();
                                 }
 
                                 transforms[nodeIndex++] = transform;
