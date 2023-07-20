@@ -15,7 +15,7 @@ namespace ZG
     }
 
 #if UNITY_EDITOR
-    [CreateAssetMenu(menuName = "ZG/Mesh Instance/Audio/Animator Event Config", fileName = "Mesh Instance Animator Audio Event Config")]
+    [CreateAssetMenu(menuName = "ZG/Mesh Instance/Animation Events/Audio Event Config", fileName = "Mesh Instance Animator Audio Event Config")]
     public class MeshInstanceAnimatorAudioEventConfig : MeshInstanceHybridAnimatorEventConfig<MeshInstanceAnimatorAudioEventHandler>
     {
         public override int GetState(AnimationEvent animationEvent) => animationEvent.intParameter;
