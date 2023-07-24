@@ -108,14 +108,15 @@ namespace ZG
         private struct Init
         {
             [ReadOnly]
+            public ComponentLookup<Rig> rigs;
+
+            [ReadOnly]
             public NativeArray<MeshInstanceSwingBoneData> instances;
 
             [ReadOnly]
             public BufferAccessor<MeshInstanceRig> instanceRigs;
 
             public BufferLookup<SwingBone> swingBones;
-
-            public ComponentLookup<Rig> rigs;
 
             public void Execute(int index)
             {
@@ -170,11 +171,13 @@ namespace ZG
         private struct InitEx : IJobChunk
         {
             [ReadOnly]
+            public ComponentLookup<Rig> rigs;
+
+            [ReadOnly]
             public BufferTypeHandle<MeshInstanceRig> instanceRigType;
 
+            [NativeDisableParallelForRestriction]
             public BufferLookup<SwingBone> swingBones;
-
-            public ComponentLookup<Rig> rigs;
 
             public ComponentTypeHandle<MeshInstanceSwingBoneData> instanceType;
 
@@ -199,11 +202,11 @@ namespace ZG
         private EntityQuery __groupToCreate;
         private EntityQuery __groupToUpdate;
 
+        private ComponentLookup<Rig> __rigs;
+
         private BufferTypeHandle<MeshInstanceRig> __instanceRigType;
 
         private BufferLookup<SwingBone> __swingBones;
-
-        private ComponentLookup<Rig> __rigs;
 
         private ComponentTypeHandle<MeshInstanceSwingBoneData> __instanceType;
 
@@ -224,9 +227,9 @@ namespace ZG
             //__group.AddChangedVersionFilter(ComponentType.ReadOnly<MeshInstanceSwingBoneData>());
             //__group.AddChangedVersionFilter(ComponentType.ReadOnly<MeshInstanceRig>());
 
+            __rigs = state.GetComponentLookup<Rig>(true);
             __instanceRigType = state.GetBufferTypeHandle<MeshInstanceRig>(true);
             __swingBones = state.GetBufferLookup<SwingBone>();
-            __rigs = state.GetComponentLookup<Rig>();
             __instanceType = state.GetComponentTypeHandle<MeshInstanceSwingBoneData>();
         }
 
@@ -260,9 +263,9 @@ namespace ZG
             }
 
             InitEx init;
+            init.rigs = __rigs.UpdateAsRef(ref state);
             init.instanceRigType = __instanceRigType.UpdateAsRef(ref state);
             init.swingBones = __swingBones.UpdateAsRef(ref state);
-            init.rigs = __rigs.UpdateAsRef(ref state);
             init.instanceType = __instanceType.UpdateAsRef(ref state);
 
             state.Dependency = init.ScheduleParallelByRef(__groupToUpdate, state.Dependency);

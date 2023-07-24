@@ -2,6 +2,7 @@ using System;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Entities.Serialization;
+using UnityEditor;
 using UnityEngine;
 
 namespace ZG
@@ -143,7 +144,8 @@ namespace ZG
 
         protected void OnValidate()
         {
-            Rebuild();
+            if(!EditorApplication.isPlayingOrWillChangePlaymode)
+                Rebuild();
         }
 
         public void Rebuild()

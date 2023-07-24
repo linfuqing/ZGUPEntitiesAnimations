@@ -1,7 +1,7 @@
 {
   "name": "cn.com.zerogame.unitypackages.entities.animations",
   "displayName": "ZGUP Entities Animations",
-  "version": "2.5.15",
+  "version": "2.5.16",
   "unity": "2022.2",
   "unityRelease": "0f1",
   "dependencies": {
