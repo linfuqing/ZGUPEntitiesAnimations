@@ -9,7 +9,7 @@ namespace ZG
             if (state < 0)
                 return;
 
-            var component = root.GetComponentInChildren<MeshInstanceAnimatorEventDispatcher>();
+            var component = root.GetComponentInChildren<AnimationEventDispatcher>();
             if (component == null || component.events == null || component.events.Length <= state)
                 return;
 
