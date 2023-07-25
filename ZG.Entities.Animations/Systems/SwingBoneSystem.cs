@@ -19,6 +19,11 @@ namespace ZG
         public float destinationDelta;
     }
 
+    public struct SwingBoneTransform : IBufferElementData
+    {
+        public float4x4 matrix;
+    }
+
     [BurstCompile, 
         UpdateInGroup(typeof(AnimationSystemGroup), OrderLast = true),
         UpdateBefore(typeof(AnimationComputeDeformationDataSystem)), 
@@ -67,14 +72,18 @@ namespace ZG
             [ReadOnly]
             public BufferAccessor<SwingBone> bones;
 
+            [ReadOnly]
             public BufferAccessor<AnimatedData> animatedDatas;
 
             public BufferAccessor<AnimatedLocalToWorld> localToWorlds;
 
+            public BufferAccessor<SwingBoneTransform> transforms;
+
             public static void Update(
-                ref AnimationStream animationStream,
+                ref DynamicBuffer<SwingBoneTransform> transforms,
                 ref NativeArray<AnimatedLocalToWorld> localToWorlds,
-                in NativeArray<SwingBone> bones, 
+                in NativeArray<SwingBone> bones,
+                in AnimationStream animationStream,
                 in float3 windDirection, 
                 float deltaTime, 
                 int index)
@@ -88,7 +97,7 @@ namespace ZG
                 var parentToWorld = parentIndex >= 0 && parentIndex < localToWorlds.Length ? localToWorlds[parentIndex].Value : float4x4.identity;
                 var parent = math.RigidTransform(parentToWorld);
 
-                float3 source = world.pos - parent.pos, destination = math.mul(parent.rot, local.pos);
+                float3 source = world.pos - parent.pos, destination = bone.index < transforms.Length ? transforms[bone.index].matrix.c3.xyz :  math.transform(parentToWorld/*parent.rot*/, local.pos);
                 //localToWorld.pos = parentToWorld.pos + destination;
 
                 //localToWorld.rot = math.slerp(localToWorld.rot, math.mul(parentToWorld.rot, localToParent.rot), bone.sourceDelta * deltaTime);
@@ -130,15 +139,27 @@ namespace ZG
 
                 localToWorlds[bone.index] = localToWorld;
 
-                var trs = math.mul(math.inverse(parentToWorld), localToWorld.Value);
+                SwingBoneTransform transform;
+                int numTransforms = transforms.Length;
+                if(numTransforms <= bone.index)
+                {
+                    int length = bone.index + 1;
+                    transforms.ResizeUninitialized(length);
 
-                animationStream.SetLocalToRootTR(bone.index, trs.c3.xyz, math.quaternion(trs));
+                    transform.matrix = float4x4.identity;
+                    for (int i = numTransforms; i < bone.index; ++i)
+                        transforms[i] = transform;
+                }
+
+                transform.matrix = localToWorld.Value;
+                transforms[bone.index] = transform;
             }
 
             public void Execute(int index)
             {
                 var wind = this.wind.Value;
 
+                var transforms = this.transforms[index];
                 var localToWorlds = this.localToWorlds[index].AsNativeArray();
 
                 var animationStream = AnimationStream.Create(rigs[index].Value, animatedDatas[index].AsNativeArray());
@@ -147,9 +168,10 @@ namespace ZG
                 int numBones = bones.Length;
                 for (int i = 0; i < numBones; ++i)
                     Update(
-                        ref animationStream,
-                        ref localToWorlds, 
-                        bones, 
+                        ref transforms, 
+                        ref localToWorlds,
+                        bones,
+                        animationStream,
                         wind.direction,
                         deltaTime, 
                         i);
@@ -170,9 +192,12 @@ namespace ZG
             [ReadOnly]
             public BufferTypeHandle<SwingBone> boneType;
 
+            [ReadOnly]
             public BufferTypeHandle<AnimatedData> animatedDataType;
 
             public BufferTypeHandle<AnimatedLocalToWorld> localToWorldType;
+
+            public BufferTypeHandle<SwingBoneTransform> transformType;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
@@ -183,6 +208,7 @@ namespace ZG
                 updateBones.bones = chunk.GetBufferAccessor(ref boneType);
                 updateBones.animatedDatas = chunk.GetBufferAccessor(ref animatedDataType);
                 updateBones.localToWorlds = chunk.GetBufferAccessor(ref localToWorldType);
+                updateBones.transforms = chunk.GetBufferAccessor(ref transformType);
 
                 var iterator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 while (iterator.NextEntityIndex(out int i))
@@ -202,6 +228,8 @@ namespace ZG
         private BufferTypeHandle<AnimatedData> __animatedDataType;
 
         private BufferTypeHandle<AnimatedLocalToWorld> __localToWorldType;
+
+        public BufferTypeHandle<SwingBoneTransform> __transformType;
 
         private NativeReference<Wind> __wind;
 
@@ -226,9 +254,11 @@ namespace ZG
 
             __boneType = state.GetBufferTypeHandle<SwingBone>(true);
 
-            __animatedDataType = state.GetBufferTypeHandle<AnimatedData>();
+            __animatedDataType = state.GetBufferTypeHandle<AnimatedData>(true);
 
             __localToWorldType = state.GetBufferTypeHandle<AnimatedLocalToWorld>();
+
+            __transformType = state.GetBufferTypeHandle<SwingBoneTransform>();
 
             __wind = new NativeReference<Wind>(Allocator.Persistent);
         }
@@ -259,6 +289,7 @@ namespace ZG
             updateBones.boneType = __boneType.UpdateAsRef(ref state);
             updateBones.animatedDataType = __animatedDataType.UpdateAsRef(ref state);
             updateBones.localToWorldType = __localToWorldType.UpdateAsRef(ref state);
+            updateBones.transformType = __transformType.UpdateAsRef(ref state);
             state.Dependency = updateBones.ScheduleParallelByRef(__group, jobHandle);
         }
     }
