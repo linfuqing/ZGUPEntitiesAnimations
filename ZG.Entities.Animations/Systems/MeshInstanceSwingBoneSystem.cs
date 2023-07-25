@@ -208,6 +208,8 @@ namespace ZG
         private EntityQuery __groupToCreate;
         private EntityQuery __groupToUpdate;
 
+        private ComponentTypeSet __componentTypes;
+
         private ComponentLookup<Rig> __rigs;
 
         private BufferTypeHandle<MeshInstanceRig> __instanceRigType;
@@ -229,6 +231,8 @@ namespace ZG
                 __groupToUpdate = builder
                     .WithAll<MeshInstanceSwingBoneData, MeshInstanceRig>()
                     .Build(ref state);
+
+            __componentTypes = new ComponentTypeSet(ComponentType.ReadOnly<SwingBone>(), ComponentType.ReadOnly<SwingBoneTransform>());
 
             //__group.AddChangedVersionFilter(ComponentType.ReadOnly<MeshInstanceSwingBoneData>());
             //__group.AddChangedVersionFilter(ComponentType.ReadOnly<MeshInstanceRig>());
@@ -264,7 +268,7 @@ namespace ZG
 
                     var entityManager = state.EntityManager;
                     entityManager.RemoveComponent<MeshInstanceSwingBoneDirty>(__groupToCreate);
-                    entityManager.AddComponent<SwingBone>(rigEntities.AsArray());
+                    entityManager.AddComponent(rigEntities.AsArray(), __componentTypes);
                 }
             }
 

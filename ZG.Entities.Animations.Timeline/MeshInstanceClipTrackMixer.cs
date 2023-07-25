@@ -11,11 +11,16 @@ namespace ZG
     public class MeshInstanceClipTrackMixer : PlayableBehaviour
     {
         private static List<MeshInstanceClipTrack> __tracks;
+        private static Dictionary<object, ulong> __frameIDs;
 
         private GameObjectEntity __player;
 
         public override void OnPlayableDestroy(Playable playable)
         {
+            object playerObject = __player;
+            if (playerObject != null)
+                __frameIDs.Remove(playerObject);
+
             if (__player != null)
             {
                 __player.RemoveComponent<MeshInstanceClipTrack>();
@@ -47,8 +52,8 @@ namespace ZG
                 return;
 
             int numInputs = playable.GetInputCount();
-            if (numInputs < 1)
-                return;
+            /*if (numInputs < 1)
+                return;*/
 
             if (__tracks == null)
                 __tracks = new List<MeshInstanceClipTrack>();
@@ -76,7 +81,21 @@ namespace ZG
             rotation.Value = matrix.c3.xyz;
             __player.SetComponentData(translation);*/
 
-            __player.SetBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
+            if (__frameIDs == null)
+                __frameIDs = new Dictionary<object, ulong>();
+
+            if (!__frameIDs.TryGetValue(__player, out ulong sourceFrameID))
+                sourceFrameID = 0;
+
+            ulong destinationFrameID = info.frameId;
+            if (destinationFrameID == sourceFrameID)
+                __player.AppendBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
+            else
+            {
+                __player.SetBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
+
+                __frameIDs[__player] = destinationFrameID;
+            }
             //__player.SetComponentEnabled<MeshInstanceAnimatorControllerClipCommand>(true);
         }
     }
