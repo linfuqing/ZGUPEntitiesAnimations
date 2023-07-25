@@ -137,8 +137,8 @@ namespace ZG
                 var instanceRigs = this.instanceRigs[index];
                 ref var definition = ref instances[index].definition.Value;
                 Entity rigEntity;
-                int numRigs = definition.rigs.Length;
-                for (int i = 0; i < numRigs; ++i)
+                int i, j, numBones, numRigs = definition.rigs.Length;
+                for (i = 0; i < numRigs; ++i)
                 {
                     ref var rig = ref definition.rigs[i];
 
@@ -148,21 +148,27 @@ namespace ZG
                     if (swingBones.Length > 0)
                         continue;
 
-                    ref var bone = ref rig.bones[i];
+                    ref var ids = ref rigs[rigEntity].Value.Value.Skeleton.Ids;
 
-                    swingBone.index = Core.FindBindingIndex(ref rigs[rigEntity].Value.Value.Skeleton.Ids, bone.boneID);
-                    if (swingBone.index == -1)
+                    numBones = rig.bones.Length;
+                    for (j = 0; j < numBones; ++j)
                     {
-                        UnityEngine.Debug.LogError($"Bone ID:{bone.boneID.Id} can not been found.");
+                        ref var bone = ref rig.bones[j];
 
-                        continue;
+                        swingBone.index = Core.FindBindingIndex(ref ids, bone.boneID);
+                        if (swingBone.index == -1)
+                        {
+                            UnityEngine.Debug.LogError($"Bone ID:{bone.boneID.Id} can not been found.");
+
+                            continue;
+                        }
+
+                        swingBone.windDelta = bone.windDelta;
+                        swingBone.sourceDelta = bone.sourceDelta;
+                        swingBone.destinationDelta = bone.destinationDelta;
+
+                        swingBones.Add(swingBone);
                     }
-
-                    swingBone.windDelta = bone.windDelta;
-                    swingBone.sourceDelta = bone.sourceDelta;
-                    swingBone.destinationDelta = bone.destinationDelta;
-
-                    swingBones.Add(swingBone);
                 }
             }
         }

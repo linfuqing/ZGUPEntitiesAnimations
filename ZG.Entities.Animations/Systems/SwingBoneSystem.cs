@@ -19,7 +19,8 @@ namespace ZG
         public float destinationDelta;
     }
 
-    [UpdateInGroup(typeof(AnimationSystemGroup), OrderLast = true),
+    [BurstCompile, 
+        UpdateInGroup(typeof(AnimationSystemGroup), OrderLast = true),
         UpdateBefore(typeof(AnimationComputeDeformationDataSystem)), 
         UpdateAfter(typeof(AnimationComputeRigMatrixSystem))]
     public partial struct SwingBoneSystem : ISystem
@@ -64,27 +65,28 @@ namespace ZG
             public NativeArray<Rig> rigs;
 
             [ReadOnly]
-            public BufferAccessor<AnimatedData> animatedDatas;
-
-            [ReadOnly]
             public BufferAccessor<SwingBone> bones;
+
+            public BufferAccessor<AnimatedData> animatedDatas;
 
             public BufferAccessor<AnimatedLocalToWorld> localToWorlds;
 
             public static void Update(
+                ref AnimationStream animationStream,
                 ref NativeArray<AnimatedLocalToWorld> localToWorlds,
                 in NativeArray<SwingBone> bones, 
-                in AnimationStream animationStream, 
                 in float3 windDirection, 
                 float deltaTime, 
                 int index)
             {
                 var bone = bones[index];
                 var localToWorld = localToWorlds[bone.index];
+                var localToParent = animationStream.GetLocalToParentMatrix(bone.index);
                 var world = math.RigidTransform(localToWorld.Value);
-                var local = math.RigidTransform(animationStream.GetLocalToParentRotation(bone.index), animationStream.GetLocalToParentTranslation(bone.index));
+                var local = math.RigidTransform(localToParent.rs, localToParent.t);
                 int parentIndex = animationStream.Rig.Value.Skeleton.ParentIndexes[bone.index];
-                var parent = parentIndex >= 0 && parentIndex < localToWorlds.Length ? math.RigidTransform(localToWorlds[parentIndex].Value) : RigidTransform.identity;
+                var parentToWorld = parentIndex >= 0 && parentIndex < localToWorlds.Length ? localToWorlds[parentIndex].Value : float4x4.identity;
+                var parent = math.RigidTransform(parentToWorld);
 
                 float3 source = world.pos - parent.pos, destination = math.mul(parent.rot, local.pos);
                 //localToWorld.pos = parentToWorld.pos + destination;
@@ -127,6 +129,10 @@ namespace ZG
                 localToWorld.Value = math.mul(math.float4x4(math.RigidTransform(rotation, destination)), localToWorld.Value);
 
                 localToWorlds[bone.index] = localToWorld;
+
+                var trs = math.mul(math.inverse(parentToWorld), localToWorld.Value);
+
+                animationStream.SetLocalToRootTR(bone.index, trs.c3.xyz, math.quaternion(trs));
             }
 
             public void Execute(int index)
@@ -135,15 +141,15 @@ namespace ZG
 
                 var localToWorlds = this.localToWorlds[index].AsNativeArray();
 
-                var animationStream = AnimationStream.CreateReadOnly(rigs[index].Value, animatedDatas[index].AsNativeArray());
+                var animationStream = AnimationStream.Create(rigs[index].Value, animatedDatas[index].AsNativeArray());
 
                 var bones = this.bones[index].AsNativeArray();
                 int numBones = bones.Length;
                 for (int i = 0; i < numBones; ++i)
                     Update(
+                        ref animationStream,
                         ref localToWorlds, 
                         bones, 
-                        animationStream, 
                         wind.direction,
                         deltaTime, 
                         i);
@@ -162,10 +168,9 @@ namespace ZG
             public ComponentTypeHandle<Rig> rigType;
 
             [ReadOnly]
-            public BufferTypeHandle<AnimatedData> animatedDataType;
-
-            [ReadOnly]
             public BufferTypeHandle<SwingBone> boneType;
+
+            public BufferTypeHandle<AnimatedData> animatedDataType;
 
             public BufferTypeHandle<AnimatedLocalToWorld> localToWorldType;
 
@@ -175,8 +180,8 @@ namespace ZG
                 updateBones.deltaTime = deltaTime;
                 updateBones.wind = wind;
                 updateBones.rigs = chunk.GetNativeArray(ref rigType);
-                updateBones.animatedDatas = chunk.GetBufferAccessor(ref animatedDataType);
                 updateBones.bones = chunk.GetBufferAccessor(ref boneType);
+                updateBones.animatedDatas = chunk.GetBufferAccessor(ref animatedDataType);
                 updateBones.localToWorlds = chunk.GetBufferAccessor(ref localToWorldType);
 
                 var iterator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
@@ -192,9 +197,9 @@ namespace ZG
 
         private ComponentTypeHandle<Rig> __rigType;
 
-        private BufferTypeHandle<AnimatedData> __animatedDataType;
-
         private BufferTypeHandle<SwingBone> __boneType;
+
+        private BufferTypeHandle<AnimatedData> __animatedDataType;
 
         private BufferTypeHandle<AnimatedLocalToWorld> __localToWorldType;
 
@@ -219,9 +224,9 @@ namespace ZG
 
             __rigType = state.GetComponentTypeHandle<Rig>(true);
 
-            __animatedDataType = state.GetBufferTypeHandle<AnimatedData>(true);
-
             __boneType = state.GetBufferTypeHandle<SwingBone>(true);
+
+            __animatedDataType = state.GetBufferTypeHandle<AnimatedData>();
 
             __localToWorldType = state.GetBufferTypeHandle<AnimatedLocalToWorld>();
 
@@ -251,8 +256,8 @@ namespace ZG
             updateBones.deltaTime = deltaTime;
             updateBones.wind = __wind;
             updateBones.rigType = __rigType.UpdateAsRef(ref state);
-            updateBones.animatedDataType = __animatedDataType.UpdateAsRef(ref state);
             updateBones.boneType = __boneType.UpdateAsRef(ref state);
+            updateBones.animatedDataType = __animatedDataType.UpdateAsRef(ref state);
             updateBones.localToWorldType = __localToWorldType.UpdateAsRef(ref state);
             state.Dependency = updateBones.ScheduleParallelByRef(__group, jobHandle);
         }
