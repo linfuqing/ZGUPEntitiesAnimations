@@ -88,16 +88,18 @@ namespace ZG
                 float deltaTime, 
                 int index)
             {
+                int numTransforms = transforms.Length;
                 var bone = bones[index];
-                var localToWorld = localToWorlds[bone.index];
+                var localToWorld = bone.index < numTransforms ? transforms[bone.index].matrix : localToWorlds[bone.index].Value;
                 var localToParent = animationStream.GetLocalToParentMatrix(bone.index);
-                var world = math.RigidTransform(localToWorld.Value);
+                var world = math.RigidTransform(localToWorld);
                 var local = math.RigidTransform(localToParent.rs, localToParent.t);
+
                 int parentIndex = animationStream.Rig.Value.Skeleton.ParentIndexes[bone.index];
                 var parentToWorld = parentIndex >= 0 && parentIndex < localToWorlds.Length ? localToWorlds[parentIndex].Value : float4x4.identity;
                 var parent = math.RigidTransform(parentToWorld);
 
-                float3 source = world.pos - parent.pos, destination = bone.index < transforms.Length ? transforms[bone.index].matrix.c3.xyz :  math.transform(parentToWorld/*parent.rot*/, local.pos);
+                float3 source = world.pos - parent.pos, destination = math.transform(parentToWorld/*parent.rot*/, local.pos);
                 //localToWorld.pos = parentToWorld.pos + destination;
 
                 //localToWorld.rot = math.slerp(localToWorld.rot, math.mul(parentToWorld.rot, localToParent.rot), bone.sourceDelta * deltaTime);
@@ -108,23 +110,26 @@ namespace ZG
                 if (!source.Equals(float3.zero))
                 {
                     destination = math.normalizesafe(destination, float3.zero);
-                    if (!destination.Equals(float3.zero) && !source.Equals(destination))
+                    if (!destination.Equals(float3.zero))
                     {
                         if (bone.windDelta > math.FLT_MIN_NORMAL && !source.Equals(windDirection))
                             source = math.mul(math.slerp(quaternion.identity, Math.FromToRotation(source, windDirection), bone.windDelta * deltaTime), source);
 
-                        /*localToWorld.rot = math.mul(//Mathematics.Math.FromToRotation(destination, math.normalizesafe(math.lerp(source, destination, instance.destinationDelta), destination)),
-                            math.slerp(Math.FromToRotation(destination, source), quaternion.identity, bone.destinationDelta * deltaTime),
-                            localToWorld.rot);*/
+                        if (!source.Equals(destination))
+                        {
+                            /*localToWorld.rot = math.mul(//Mathematics.Math.FromToRotation(destination, math.normalizesafe(math.lerp(source, destination, instance.destinationDelta), destination)),
+                                math.slerp(Math.FromToRotation(destination, source), quaternion.identity, bone.destinationDelta * deltaTime),
+                                localToWorld.rot);*/
 
-                        rotation = math.slerp(Math.FromToRotation(destination, source), quaternion.identity, bone.destinationDelta * deltaTime);
+                            rotation = math.slerp(Math.FromToRotation(destination, source), quaternion.identity, bone.destinationDelta * deltaTime);
 
-                        isRotation = true;
+                            isRotation = true;
+                        }
                     }
                 }
 
                 if(!isRotation)
-                    rotation = math.slerp(quaternion.identity, math.mul(parent.rot, math.inverse(world.rot)), bone.sourceDelta * deltaTime);
+                    rotation = math.slerp(quaternion.identity, math.mul(math.mul(parent.rot, local.rot), math.inverse(world.rot)), bone.sourceDelta * deltaTime);
 
                 //info.local.rot = math.mul(math.inverse(parent.rot), info.world.rot);
 
@@ -135,23 +140,25 @@ namespace ZG
                         Update(instance, info.world, windDirection, children[i].entity);
                 }*/
 
-                localToWorld.Value = math.mul(math.float4x4(math.RigidTransform(rotation, destination)), localToWorld.Value);
+                AnimatedLocalToWorld animatedLocalToWorld;
+                animatedLocalToWorld.Value = math.mul(math.float4x4(math.RigidTransform(rotation, destination - source)), localToWorld);
 
-                localToWorlds[bone.index] = localToWorld;
+                localToWorlds[bone.index] = animatedLocalToWorld;
 
                 SwingBoneTransform transform;
-                int numTransforms = transforms.Length;
                 if(numTransforms <= bone.index)
                 {
                     int length = bone.index + 1;
                     transforms.ResizeUninitialized(length);
 
-                    transform.matrix = float4x4.identity;
                     for (int i = numTransforms; i < bone.index; ++i)
+                    {
+                        transform.matrix = localToWorlds[i].Value;
                         transforms[i] = transform;
+                    }
                 }
 
-                transform.matrix = localToWorld.Value;
+                transform.matrix = localToWorld;
                 transforms[bone.index] = transform;
             }
 
