@@ -169,7 +169,7 @@ namespace ZG
                 var transforms = this.transforms[index];
                 var localToWorlds = this.localToWorlds[index].AsNativeArray();
 
-                var animationStream = AnimationStream.Create(rigs[index].Value, animatedDatas[index].AsNativeArray());
+                var animationStream = AnimationStream.CreateReadOnly(rigs[index].Value, animatedDatas[index].AsNativeArray());
 
                 var bones = this.bones[index].AsNativeArray();
                 int numBones = bones.Length;
