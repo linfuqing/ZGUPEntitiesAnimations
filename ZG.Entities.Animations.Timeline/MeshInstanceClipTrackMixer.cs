@@ -15,6 +15,8 @@ namespace ZG
 
         private GameObjectEntity __player;
 
+        internal UnityEngine.Transform _parent;
+
         public override void OnPlayableDestroy(Playable playable)
         {
             object playerObject = __player;
@@ -61,16 +63,13 @@ namespace ZG
                 __tracks.Clear();
 
             Playable input;
+            float4x4 localToWorld = _parent == null ? float4x4.identity : _parent.localToWorldMatrix;
             for (int i = 0; i < numInputs; ++i)
             {
                 input = playable.GetInput(i);
                 var clip = ((ScriptPlayable<MeshInstanceClipPlayable>)input).GetBehaviour();
                 if (clip != null/* && playable.GetPlayState() == PlayState.Playing*/)
-                {
-                    float weight = playable.GetInputWeight(i);
-
-                    __tracks.Add(clip.GetTrack(input, weight));
-                }
+                    __tracks.Add(clip.GetTrack(input, localToWorld, playable.GetInputWeight(i)));
             }
 
             /*Translation translation;

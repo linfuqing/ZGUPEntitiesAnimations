@@ -15,6 +15,9 @@ namespace ZG
         {
             var mixer = ScriptPlayable<MeshInstanceClipTrackMixer>.Create(graph);
             mixer.SetInputCount(inputCount);
+
+            mixer.GetBehaviour()._parent = go == null ? null : go.transform;
+
             return mixer;
         }
     }

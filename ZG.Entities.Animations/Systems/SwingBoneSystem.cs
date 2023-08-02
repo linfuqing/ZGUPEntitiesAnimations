@@ -245,9 +245,11 @@ namespace ZG
         {
             using (var builder = new EntityQueryBuilder(Allocator.Temp))
                 __group = builder
-                        .WithAll<SwingBone, Rig, AnimatedData>()
+                        .WithAll<SwingBone, SwingBoneTransform, Rig, AnimatedData>()
                         .WithAllRW<AnimatedLocalToWorld>()
                         .Build(ref state);
+
+            state.RequireForUpdate(__group);
 
             using (var builder = new EntityQueryBuilder(Allocator.Temp))
                 __windGroup = builder

@@ -19,7 +19,7 @@ namespace ZG
         internal BlobAssetReference<MeshInstanceClipFactoryDefinition> _factory;
         internal BlobAssetReference<MeshInstanceClipDefinition> _definition;
 
-        public MeshInstanceClipTrack GetTrack(Playable playable, float weight)
+        public MeshInstanceClipTrack GetTrack(Playable playable, float4x4 transform, float weight)
         {
             MeshInstanceClipTrack track;
             track.clipIndex = _clipIndex;
@@ -36,7 +36,7 @@ namespace ZG
                     track.time = _duration + track.time;
             }
 
-            track.matrix = _matrix;
+            track.matrix = math.mul(transform, _matrix);
             track.factory = _factory;
             track.definition = _definition;
 
