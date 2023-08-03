@@ -6,6 +6,7 @@ using Unity.Mathematics;
 using Unity.Entities;
 using Unity.Animation;
 using UnityEngine.Jobs;
+using UnityEngine;
 
 namespace ZG
 {
@@ -33,7 +34,7 @@ namespace ZG
         private struct Collect : IJobChunk
         {
             [ReadOnly]
-            public BufferLookup<AnimatedLocalToWorld> localToWorlds;
+            public BufferLookup<AnimatedLocalToRoot> localToRoots;
 
             [ReadOnly]
             public ComponentTypeHandle<HybridRigNode> rigNodeType;
@@ -46,18 +47,18 @@ namespace ZG
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
-                DynamicBuffer<AnimatedLocalToWorld> localToWorlds;
+                DynamicBuffer<AnimatedLocalToRoot> localToRoots;
                 var rigNodes = chunk.GetNativeArray(ref rigNodeType);
                 var iterator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 int index = baseEntityIndexArray[unfilteredChunkIndex];
                 while (iterator.NextEntityIndex(out int i))
                 {
                     var rigNode = rigNodes[i];
-                    if (this.localToWorlds.HasBuffer(rigNode.rigEntity))
+                    if (this.localToRoots.HasBuffer(rigNode.rigEntity))
                     {
-                        localToWorlds = this.localToWorlds[rigNode.rigEntity];
+                        localToRoots = this.localToRoots[rigNode.rigEntity];
 
-                        results[index++] = rigNode.boneIndex < localToWorlds.Length ? localToWorlds[rigNode.boneIndex].Value : float4x4.identity;
+                        results[index++] = rigNode.boneIndex < localToRoots.Length ? localToRoots[rigNode.boneIndex].Value : float4x4.identity;
                     }
                     else
                         results[index++] = float4x4.identity;
@@ -76,16 +77,17 @@ namespace ZG
                 if (!transform.isValid)
                     return;
 
-                var result = results[index];
+                var result = (Matrix4x4)results[index];
 
-                transform.position = result.c3.xyz;
-                transform.rotation = math.quaternion(result);
+                transform.localPosition = result.GetPosition();
+                transform.localRotation = result.rotation;
+                transform.localScale = result.lossyScale;
             }
         }
 
         private EntityQuery __group;
         private TransformAccessArrayEx __transformAccessArray;
-        private BufferLookup<AnimatedLocalToWorld> __localToWorlds;
+        private BufferLookup<AnimatedLocalToRoot> __localToRoots;
         private ComponentTypeHandle<HybridRigNode> __rigNodeType;
 
         protected override void OnCreate()
@@ -96,7 +98,7 @@ namespace ZG
 
             __transformAccessArray = new TransformAccessArrayEx(__group);
 
-            __localToWorlds = GetBufferLookup<AnimatedLocalToWorld>(true);
+            __localToRoots = GetBufferLookup<AnimatedLocalToRoot>(true);
             __rigNodeType = GetComponentTypeHandle<HybridRigNode>(true);
         }
 
@@ -115,7 +117,7 @@ namespace ZG
             ref var state = ref this.GetState();
 
             Collect collect;
-            collect.localToWorlds = __localToWorlds.UpdateAsRef(ref state);
+            collect.localToRoots = __localToRoots.UpdateAsRef(ref state);
             collect.rigNodeType = __rigNodeType.UpdateAsRef(ref state);
             collect.baseEntityIndexArray = __group.CalculateBaseEntityIndexArrayAsync(Allocator.TempJob, Dependency, out var jobHandle);
             collect.results = results;
