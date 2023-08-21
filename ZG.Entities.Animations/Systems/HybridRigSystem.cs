@@ -69,7 +69,7 @@ namespace ZG
         [BurstCompile]
         private struct Apply : IJobParallelForTransform
         {
-            [DeallocateOnJobCompletion]
+            [ReadOnly, DeallocateOnJobCompletion]
             public NativeArray<float4x4> results;
 
             public void Execute(int index, TransformAccess transform)
@@ -77,9 +77,12 @@ namespace ZG
                 if (!transform.isValid)
                     return;
 
-                var inverseParent = math.mul(float4x4.TRS(transform.localPosition, transform.localRotation, transform.localScale), math.inverse(transform.localToWorldMatrix));
+                var inverseParent = math.mul(float4x4.TRS(transform.localPosition, transform.localRotation, transform.localScale), transform.worldToLocalMatrix);
 
                 var result = (Matrix4x4)math.mul(inverseParent, results[index]);
+
+                if (!result.ValidTRS())
+                    return;
 
                 transform.localPosition = result.GetPosition();
                 transform.localRotation = result.rotation;
