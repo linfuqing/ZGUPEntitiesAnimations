@@ -111,6 +111,7 @@ namespace ZG
         CreateAfter(typeof(MeshInstanceRendererSystem)), 
         CreateAfter(typeof(MeshInstanceRigStructChangeSystem)), 
         UpdateInGroup(typeof(AnimationSystemGroup), OrderLast = true)]
+    [WorldSystemFilter(WorldSystemFilterFlags.Presentation)]
     public partial struct MeshInstanceAnimationMaterialSystem : ISystem
     {
         private struct Count

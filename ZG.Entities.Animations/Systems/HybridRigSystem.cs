@@ -34,7 +34,7 @@ namespace ZG
         private struct Collect : IJobChunk
         {
             [ReadOnly]
-            public BufferLookup<AnimatedLocalToRoot> localToRoots;
+            public BufferLookup<AnimatedLocalToWorld> localToWorlds;
 
             [ReadOnly]
             public ComponentTypeHandle<HybridRigNode> rigNodeType;
@@ -47,18 +47,18 @@ namespace ZG
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
-                DynamicBuffer<AnimatedLocalToRoot> localToRoots;
+                DynamicBuffer<AnimatedLocalToWorld> localToWorlds;
                 var rigNodes = chunk.GetNativeArray(ref rigNodeType);
                 var iterator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 int index = baseEntityIndexArray[unfilteredChunkIndex];
                 while (iterator.NextEntityIndex(out int i))
                 {
                     var rigNode = rigNodes[i];
-                    if (this.localToRoots.HasBuffer(rigNode.rigEntity))
+                    if (this.localToWorlds.HasBuffer(rigNode.rigEntity))
                     {
-                        localToRoots = this.localToRoots[rigNode.rigEntity];
+                        localToWorlds = this.localToWorlds[rigNode.rigEntity];
 
-                        results[index++] = rigNode.boneIndex < localToRoots.Length ? localToRoots[rigNode.boneIndex].Value : float4x4.identity;
+                        results[index++] = rigNode.boneIndex < localToWorlds.Length ? localToWorlds[rigNode.boneIndex].Value : float4x4.identity;
                     }
                     else
                         results[index++] = float4x4.identity;
@@ -77,7 +77,9 @@ namespace ZG
                 if (!transform.isValid)
                     return;
 
-                var result = (Matrix4x4)results[index];
+                var inverseParent = math.mul(float4x4.TRS(transform.localPosition, transform.localRotation, transform.localScale), math.inverse(transform.localToWorldMatrix));
+
+                var result = (Matrix4x4)math.mul(inverseParent, results[index]);
 
                 transform.localPosition = result.GetPosition();
                 transform.localRotation = result.rotation;
@@ -87,7 +89,7 @@ namespace ZG
 
         private EntityQuery __group;
         private TransformAccessArrayEx __transformAccessArray;
-        private BufferLookup<AnimatedLocalToRoot> __localToRoots;
+        private BufferLookup<AnimatedLocalToWorld> __localToWorlds;
         private ComponentTypeHandle<HybridRigNode> __rigNodeType;
 
         protected override void OnCreate()
@@ -98,7 +100,7 @@ namespace ZG
 
             __transformAccessArray = new TransformAccessArrayEx(__group);
 
-            __localToRoots = GetBufferLookup<AnimatedLocalToRoot>(true);
+            __localToWorlds = GetBufferLookup<AnimatedLocalToWorld>(true);
             __rigNodeType = GetComponentTypeHandle<HybridRigNode>(true);
         }
 
@@ -117,16 +119,16 @@ namespace ZG
             ref var state = ref this.GetState();
 
             Collect collect;
-            collect.localToRoots = __localToRoots.UpdateAsRef(ref state);
+            collect.localToWorlds = __localToWorlds.UpdateAsRef(ref state);
             collect.rigNodeType = __rigNodeType.UpdateAsRef(ref state);
             collect.baseEntityIndexArray = __group.CalculateBaseEntityIndexArrayAsync(Allocator.TempJob, Dependency, out var jobHandle);
             collect.results = results;
 
-            jobHandle = collect.ScheduleParallel(__group, jobHandle);
+            jobHandle = collect.ScheduleParallelByRef(__group, jobHandle);
 
             Apply apply;
             apply.results = results;
-            Dependency = apply.Schedule(transformAccessArray, jobHandle);
+            Dependency = apply.ScheduleByRef(transformAccessArray, jobHandle);
         }
     }
 }

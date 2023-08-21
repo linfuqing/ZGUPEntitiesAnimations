@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using Unity.Animation;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
@@ -38,6 +36,7 @@ namespace ZG
 
     }
 
+#if !SWING_BONE_V1
     [BurstCompile, UpdateInGroup(typeof(MeshInstanceSystemGroup)), UpdateAfter(typeof(MeshInstanceRigSystem))]
     public partial struct MeshInstanceSwingBoneSystem : ISystem
     {
@@ -281,4 +280,6 @@ namespace ZG
             state.Dependency = init.ScheduleParallelByRef(__groupToUpdate, state.Dependency);
         }
     }
+    
+#endif
 }

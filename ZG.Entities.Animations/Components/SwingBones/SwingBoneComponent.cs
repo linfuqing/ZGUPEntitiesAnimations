@@ -1,5 +1,16 @@
 ﻿using Unity.Entities;
 using UnityEngine;
+#if SWING_BONE_V1
+using System;
+using System.Collections.Generic;
+using UnityEngine.Jobs;
+using Unity.Mathematics;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Burst;
+using Unity.Burst.Intrinsics;
+using Math = ZG.Mathematics.Math;
+#endif
 
 namespace ZG
 {
