@@ -48,7 +48,7 @@ namespace ZG
     }
 #endif
 
-    [BurstCompile, UpdateAfter(typeof(AnimationSystemGroup))]
+    [BurstCompile, UpdateBefore(typeof(AnimatorControllerSystem))]
     public partial struct MeshInstanceHybridAnimatorEventCollectSystem : ISystem
     {
         private struct Count
@@ -209,22 +209,14 @@ namespace ZG
             private set;
         }
 
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            BurstUtility.InitializeJob<Init>();
-
-            __group = state.GetEntityQuery(
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceRig>(),
-                        ComponentType.ReadOnly<MeshInstanceAnimatorData>(),
-                        TransformAccessArrayEx.componentType
-                    },
-                    Options = EntityQueryOptions.IncludeDisabledEntities
-                });
-
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __group = builder
+                        .WithAll<MeshInstanceRig, MeshInstanceAnimatorData, EntityObject<Transform>>()
+                        .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                        .Build(ref state);
             __events = state.GetBufferLookup<AnimatorControllerEvent>(true);
             __rigType = state.GetBufferTypeHandle<MeshInstanceRig>(true);
             __instanceType = state.GetComponentTypeHandle<MeshInstanceAnimatorData>(true);
@@ -235,6 +227,7 @@ namespace ZG
             events = new SharedMultiHashMap<EntityObject<Transform>, AnimatorControllerEvent>(Allocator.Persistent);
         }
 
+        //[BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
             __counter.Dispose();
@@ -249,15 +242,13 @@ namespace ZG
             var rigType = __rigType.UpdateAsRef(ref state);
             var instanceType = __instanceType.UpdateAsRef(ref state);
 
-            NativeCounter counter = __counter;
-
             CountEx count;
             count.events = events;
             count.rigType = rigType;
             count.instanceType = instanceType;
-            count.counter = counter;
+            count.counter = __counter;
 
-            var jobHandle = count.ScheduleParallel(__group, state.Dependency);
+            var jobHandle = count.ScheduleParallelByRef(__group, state.Dependency);
 
             var results = this.events;
             ref var lookupJobManager = ref results.lookupJobManager;
@@ -266,7 +257,7 @@ namespace ZG
             Init init;
             init.counter = __counter;
             init.events = results.writer;
-            jobHandle = init.Schedule(jobHandle);
+            jobHandle = init.ScheduleByRef(jobHandle);
 
             CollectEx collect;
             collect.events = events;
@@ -275,7 +266,7 @@ namespace ZG
             collect.transformType = __transformType.UpdateAsRef(ref state);
             collect.results = results.parallelWriter;
 
-            jobHandle = collect.ScheduleParallel(__group, jobHandle);
+            jobHandle = collect.ScheduleParallelByRef(__group, jobHandle);
 
             lookupJobManager.readWriteJobHandle = jobHandle;
 
@@ -283,7 +274,7 @@ namespace ZG
         }
     }
 
-    [UpdateInGroup(typeof(PresentationSystemGroup))]
+    [CreateAfter(typeof(MeshInstanceHybridAnimatorEventCollectSystem)), UpdateInGroup(typeof(PresentationSystemGroup))]
     public partial class MeshInstanceHybridAnimatorEventDispatchSystem : SystemBase
     {
         private SharedMultiHashMap<EntityObject<Transform>, AnimatorControllerEvent> __events;
@@ -293,7 +284,7 @@ namespace ZG
         {
             base.OnCreate();
 
-            __events = World.GetOrCreateSystemUnmanaged<MeshInstanceHybridAnimatorEventCollectSystem>().events;
+            __events = World.GetExistingSystemUnmanaged<MeshInstanceHybridAnimatorEventCollectSystem>().events;
             __handlers = new Dictionary<StringHash, IMeshInstanceHybridAnimatorEventHandler>();
 
             IMeshInstanceHybridAnimatorEventHandler handler;
@@ -330,7 +321,7 @@ namespace ZG
             AnimatorControllerEvent result;
             Unity.Collections.LowLevel.Unsafe.KeyValue<EntityObject<Transform>, AnimatorControllerEvent> keyValue;
             var enumerator = __events.GetEnumerator();
-            while(enumerator.MoveNext())
+            while (enumerator.MoveNext())
             {
                 keyValue = enumerator.Current;
 
