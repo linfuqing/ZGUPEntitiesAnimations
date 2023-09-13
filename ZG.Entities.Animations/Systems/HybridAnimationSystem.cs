@@ -193,7 +193,7 @@ namespace ZG
         public float value;
     }
 
-    [UpdateAfter(typeof(AnimationSystemGroup))]
+    [BurstCompile, UpdateAfter(typeof(AnimationSystemGroup))]
     public partial struct HybridAnimationSystem : ISystem
     {
         [BurstCompile]
@@ -386,6 +386,19 @@ namespace ZG
         }
 
         private EntityQuery __group;
+
+        private ComponentTypeHandle<Rig> __rigType;
+
+        private ComponentTypeHandle<HybridAnimationData> __instanceType;
+
+        private ComponentTypeHandle<HybridAnimationRoot> __rootType;
+
+        private BufferLookup<HybridAnimationObject> __animationObjects;
+
+        private BufferTypeHandle<AnimatedData> __animatedDataType;
+
+        private BufferTypeHandle<OldAnimatedData> __oldAnimatedDataType;
+
         private SingletonAssetContainer<int> __typeIndices;
 
         public SharedMultiHashMap<HybridAnimationComponent, HybridAnimationField> componentFields
@@ -395,61 +408,73 @@ namespace ZG
             private set;
         }
 
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            __group = state.GetEntityQuery(
-                ComponentType.ReadOnly<Rig>(),
-                ComponentType.ReadOnly<HybridAnimationData>(),
-                ComponentType.ReadOnly<HybridAnimationRoot>(),
-                ComponentType.ReadOnly<AnimatedData>(),
-                ComponentType.ReadWrite<OldAnimatedData>());
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __group = builder
+                        .WithAll<Rig, HybridAnimationData, HybridAnimationRoot, AnimatedData>()
+                        .WithAllRW<OldAnimatedData>()
+                        .Build(ref state);
 
-            __typeIndices = SingletonAssetContainer<int>.instance;
+            __rigType = state.GetComponentTypeHandle<Rig>(true);
+            __instanceType = state.GetComponentTypeHandle<HybridAnimationData>(true);
+            __rootType = state.GetComponentTypeHandle<HybridAnimationRoot>(true);
+            __animationObjects = state.GetBufferLookup<HybridAnimationObject>(true);
+            __animatedDataType = state.GetBufferTypeHandle<AnimatedData>(true);
+            __oldAnimatedDataType = state.GetBufferTypeHandle<OldAnimatedData>();
+
+            __typeIndices = SingletonAssetContainer<int>.Retain();
 
             componentFields = new SharedMultiHashMap<HybridAnimationComponent, HybridAnimationField>(Allocator.Persistent);
         }
 
+        //[BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
+            __typeIndices.Release();
+
             componentFields.Dispose();
         }
 
+        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            var componentFields = this.componentFields;
-            ref var lookupJobManager = ref componentFields.lookupJobManager;
-            lookupJobManager.CompleteReadWriteDependency();
+            //lookupJobManager.CompleteReadWriteDependency();
 
             var counter = new NativeCounter(Allocator.TempJob);
 
-            var instanceType = state.GetComponentTypeHandle<HybridAnimationData>(true);
+            var instanceType = __instanceType.UpdateAsRef(ref state);
 
             Count count;
             count.instanceType = instanceType;
             count.counter = counter;
-            var jobHandle = count.ScheduleParallel(__group, state.Dependency);
+            var jobHandle = count.ScheduleParallelByRef(__group, state.Dependency);
+
+            var componentFields = this.componentFields;
+            ref var componentFieldsJobManager = ref componentFields.lookupJobManager;
 
             Clear clear;
             clear.counter = counter;
             clear.componentFields = componentFields.writer;
-            jobHandle = clear.Schedule(jobHandle);
+            jobHandle = clear.ScheduleByRef(JobHandle.CombineDependencies(componentFieldsJobManager.readWriteJobHandle, jobHandle));
 
             var disposeJobHandle = counter.Dispose(jobHandle);
 
             PlaybackEx playback;
             playback.typeIndices = __typeIndices.reader;
-            playback.rigType = state.GetComponentTypeHandle<Rig>(true);
+            playback.rigType = __rigType.UpdateAsRef(ref state);
             playback.instanceType = instanceType;
-            playback.rootType = state.GetComponentTypeHandle<HybridAnimationRoot>(true);
-            playback.animationObjects = state.GetBufferLookup<HybridAnimationObject>(true);
-            playback.animatedDataType = state.GetBufferTypeHandle<AnimatedData>(true);
-            playback.oldAnimatedDataType = state.GetBufferTypeHandle<OldAnimatedData>();
+            playback.rootType = __rootType.UpdateAsRef(ref state);
+            playback.animationObjects = __animationObjects.UpdateAsRef(ref state);
+            playback.animatedDataType = __animatedDataType.UpdateAsRef(ref state);
+            playback.oldAnimatedDataType = __oldAnimatedDataType.UpdateAsRef(ref state);
             playback.componentFields = componentFields.parallelWriter;
-            jobHandle = playback.ScheduleParallel(__group, jobHandle);
+            jobHandle = playback.ScheduleParallelByRef(__group, jobHandle);
 
             __typeIndices.AddDependency(state.GetSystemID(), jobHandle);
 
-            lookupJobManager.readWriteJobHandle = jobHandle;
+            componentFieldsJobManager.readWriteJobHandle = jobHandle;
 
             state.Dependency = JobHandle.CombineDependencies(jobHandle, disposeJobHandle);
         }
