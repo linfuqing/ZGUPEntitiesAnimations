@@ -37,13 +37,11 @@ namespace ZG
         public int value;
     }
 
-    [Serializable]
     public struct MeshInstanceHybridAnimationObjectData : IComponentData
     {
         public int index;
     }
 
-    [Serializable]
     public struct MeshInstanceHybridAnimationObjectInfo : ICleanupComponentData
     {
         public Entity parentEntity;
@@ -125,6 +123,12 @@ namespace ZG
         [BurstCompile]
         private struct Init : IJobParallelFor
         {
+            [ReadOnly]
+            public SharedHashMap<int, BlobAssetReference<MeshInstanceRigPrefab>>.Reader rigPrefabs;
+
+            [ReadOnly]
+            public SingletonAssetContainer<BlobAssetReference<HybridAnimationDefinition>>.Reader animationDefinitions;
+
             [ReadOnly, DeallocateOnJobCompletion]
             public NativeArray<Entity> entityArray;
 
@@ -133,12 +137,6 @@ namespace ZG
 
             [ReadOnly]
             public ComponentLookup<MeshInstanceRigID> rigIDs;
-
-            [ReadOnly]
-            public SharedHashMap<int, BlobAssetReference<MeshInstanceRigPrefab>>.Reader rigPrefabs;
-
-            [ReadOnly]
-            public SingletonAssetContainer<BlobAssetReference<HybridAnimationDefinition>>.Reader animationDefinitions;
 
             [NativeDisableParallelForRestriction]
             public ComponentLookup<HybridAnimationData> animations;
@@ -182,9 +180,23 @@ namespace ZG
         private ComponentTypeSet __animationComponentTypes;
         private EntityQuery __groupToDestroy;
         private EntityQuery __groupToCreate;
+
+        private ComponentTypeHandle<MeshInstanceHybridAnimationData> __instanceType;
+
+        private ComponentTypeHandle<MeshInstanceRigID> __rigIDType;
+
+        private ComponentLookup<MeshInstanceHybridAnimationData> __instances;
+
+        private ComponentLookup<MeshInstanceRigID> __rigIDs;
+
+        private ComponentLookup<HybridAnimationData> __animations;
+
+        private ComponentLookup<HybridAnimationRoot> __animationRoots;
+
         private SharedHashMap<int, BlobAssetReference<MeshInstanceRigPrefab>> __rigPrefabs;
         private SingletonAssetContainer<BlobAssetReference<HybridAnimationDefinition>> __animationDefinitions;
 
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             BurstUtility.InitializeJobParallelFor<Init>();
@@ -194,58 +206,40 @@ namespace ZG
                 ComponentType.ReadOnly<HybridAnimationRoot>(),
                 ComponentType.ReadWrite<OldAnimatedData>());
 
-            __groupToDestroy = state.GetEntityQuery(
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceHybridAnimationID>()
-                    },
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __groupToDestroy = builder
+                        .WithAll<MeshInstanceHybridAnimationID>()
+                        .WithNone<MeshInstanceHybridAnimationData>()
+                        .AddAdditionalQuery()
+                        .WithAll<MeshInstanceHybridAnimationID, MeshInstanceHybridAnimationData>()
+                        .WithAny<MeshInstanceHybridAnimationDisabled>()
+                        .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                        .Build(ref state);
 
-                    None = new ComponentType[]
-                    {
-                        typeof(MeshInstanceHybridAnimationData)
-                    }
-                },
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceHybridAnimationID>(),
-                        ComponentType.ReadOnly<MeshInstanceHybridAnimationData>(),
-                    },
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __groupToCreate = builder
+                    .WithAll<MeshInstanceHybridAnimationData, MeshInstanceRigID>()
+                    .WithNone<MeshInstanceHybridAnimationID>()
+                    .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                    .Build(ref state);
 
-                    Any = new ComponentType[]
-                    {
-                        typeof(MeshInstanceHybridAnimationDisabled)
-                    },
+            __instanceType = state.GetComponentTypeHandle<MeshInstanceHybridAnimationData>(true);
+            __rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
 
-                    Options = EntityQueryOptions.IncludeDisabledEntities
-                });
+            __instances = state.GetComponentLookup<MeshInstanceHybridAnimationData>(true);
+            __rigIDs = state.GetComponentLookup<MeshInstanceRigID>(true);
+            __animations = state.GetComponentLookup<HybridAnimationData>();
+            __animationRoots = state.GetComponentLookup<HybridAnimationRoot>();
 
-            __groupToCreate = state.GetEntityQuery(
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceHybridAnimationData>(),
-                        ComponentType.ReadOnly<MeshInstanceRigID>()
-                    }, 
-                    None = new ComponentType[]
-                    {
-                        typeof(MeshInstanceHybridAnimationID)
-                    }, 
-                    Options = EntityQueryOptions.IncludeDisabledEntities
-                });
+            __rigPrefabs = state.WorldUnmanaged.GetExistingSystemUnmanaged<MeshInstanceRigFactorySystem>().prefabs;
 
-            __rigPrefabs = state.World.GetOrCreateSystemUnmanaged<MeshInstanceRigFactorySystem>().prefabs;
-
-            __animationDefinitions = SingletonAssetContainer<BlobAssetReference<HybridAnimationDefinition>>.instance;
+            __animationDefinitions = SingletonAssetContainer<BlobAssetReference<HybridAnimationDefinition>>.Retain();
         }
 
+        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-
+            __animationDefinitions.Release();
         }
 
         [BurstCompile]
@@ -260,12 +254,12 @@ namespace ZG
                 state.CompleteDependency();
 
                 CollectEx collect;
-                collect.instanceType = state.GetComponentTypeHandle<MeshInstanceHybridAnimationData>(true);
-                collect.rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
+                collect.instanceType = __instanceType.UpdateAsRef(ref state);
+                collect.rigIDType = __rigIDType.UpdateAsRef(ref state);
                 collect.rigPrefabs = __rigPrefabs.reader;
                 collect.entities = entities;
 
-                collect.Run(__groupToCreate);
+                collect.RunByRef(__groupToCreate);
 
                 int numEntities = entities.Length;
                 for (int i = 0; i < numEntities; ++i)
@@ -276,15 +270,15 @@ namespace ZG
             entityManager.AddComponent<MeshInstanceHybridAnimationID>(__groupToCreate);
 
             Init init;
-            init.entityArray = entityArray;
-            init.instances = state.GetComponentLookup<MeshInstanceHybridAnimationData>(true);
-            init.rigIDs = state.GetComponentLookup<MeshInstanceRigID>(true);
             init.rigPrefabs = __rigPrefabs.reader;
             init.animationDefinitions = __animationDefinitions.reader;
-            init.animations = state.GetComponentLookup<HybridAnimationData>();
-            init.animationRoots = state.GetComponentLookup<HybridAnimationRoot>();
+            init.entityArray = entityArray;
+            init.instances = __instances.UpdateAsRef(ref state);
+            init.rigIDs = __rigIDs.UpdateAsRef(ref state);
+            init.animations = __animations.UpdateAsRef(ref state);
+            init.animationRoots = __animationRoots.UpdateAsRef(ref state);
 
-            var jobHandle = init.Schedule(entityArray.Length, InnerloopBatchCount, state.Dependency);
+            var jobHandle = init.ScheduleByRef(entityArray.Length, InnerloopBatchCount, state.Dependency);
 
             __animationDefinitions.AddDependency(state.GetSystemID(), jobHandle);
 
@@ -292,7 +286,7 @@ namespace ZG
         }
     }
 
-    [UpdateInGroup(typeof(MeshInstanceSystemGroup)), UpdateAfter(typeof(MeshInstanceRigSystem))]
+    [BurstCompile, UpdateInGroup(typeof(MeshInstanceSystemGroup)), UpdateAfter(typeof(MeshInstanceRigSystem))]
     public partial struct MeshInstanceHybridAnimationSystem : ISystem
     {
         [BurstCompile]
@@ -397,44 +391,74 @@ namespace ZG
         private EntityQuery __rootGroup;
         private EntityQuery __animationGroup;
 
+        private EntityTypeHandle __entityType;
+
+        private ComponentTypeHandle<MeshInstanceHybridAnimationObjectData> __instanceType;
+
+        private BufferTypeHandle<EntityParent> __entityParentType;
+
+        private ComponentLookup<MeshInstanceHybridAnimationData> __instances;
+
+        private BufferLookup<MeshInstanceRig> __rigs;
+
+        private ComponentLookup<HybridAnimationRoot> __animationRoots;
+
+        private BufferLookup<HybridAnimationObject> __animationObjects;
+
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            __rootGroup = state.GetEntityQuery(
-                ComponentType.ReadOnly<MeshInstanceHybridAnimationData>(),
-                ComponentType.ReadOnly<MeshInstanceHybridAnimationID>(),
-                ComponentType.ReadOnly<MeshInstanceRig>(),
-                ComponentType.Exclude<HybridAnimationObject>());
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __rootGroup = builder
+                    .WithAll<MeshInstanceHybridAnimationData, MeshInstanceHybridAnimationID, MeshInstanceRig>()
+                    .WithNone<HybridAnimationObject>()
+                    .Build(ref state);
 
-            __animationGroup = state.GetEntityQuery(
-                ComponentType.ReadOnly<MeshInstanceHybridAnimationObjectData>(),
-                ComponentType.Exclude<MeshInstanceHybridAnimationObjectInfo>());
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __animationGroup = builder
+                    .WithAll<MeshInstanceHybridAnimationObjectData>()
+                    .WithNone<MeshInstanceHybridAnimationObjectInfo>()
+                    .Build(ref state);
+
+            __entityType = state.GetEntityTypeHandle();
+            __instanceType = state.GetComponentTypeHandle<MeshInstanceHybridAnimationObjectData>(true);
+            __entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
+
+            __instances = state.GetComponentLookup<MeshInstanceHybridAnimationData>(true);
+            __rigs = state.GetBufferLookup<MeshInstanceRig>(true);
+            __animationRoots = state.GetComponentLookup<HybridAnimationRoot>();
+            __animationObjects = state.GetBufferLookup<HybridAnimationObject>();
         }
 
+        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
 
         }
 
+        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var entityArray = __rootGroup.ToEntityArray(Allocator.TempJob);
 
             state.EntityManager.AddComponent<HybridAnimationObject>(__rootGroup);
 
+            var animationObjects = __animationObjects.UpdateAsRef(ref state);
+
             Init init;
             init.entityArray = entityArray;
-            init.instances = state.GetComponentLookup<MeshInstanceHybridAnimationData>(true);
-            init.rigs = state.GetBufferLookup<MeshInstanceRig>(true);
-            init.animationRoots = state.GetComponentLookup<HybridAnimationRoot>();
-            init.animationObjects = state.GetBufferLookup<HybridAnimationObject>();
-            var jobHandle = init.Schedule(entityArray.Length, InnerloopBatchCount, state.Dependency);
+            init.instances = __instances.UpdateAsRef(ref state);
+            init.rigs = __rigs.UpdateAsRef(ref state);
+            init.animationRoots = __animationRoots.UpdateAsRef(ref state);
+            init.animationObjects = animationObjects;
+            var jobHandle = init.ScheduleByRef(entityArray.Length, InnerloopBatchCount, state.Dependency);
 
             SetObjectsEx setObjects;
-            setObjects.entityType = state.GetEntityTypeHandle();
-            setObjects.instanceType = state.GetComponentTypeHandle<MeshInstanceHybridAnimationObjectData>(true);
-            setObjects.entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
-            setObjects.animationObjects = state.GetBufferLookup<HybridAnimationObject>();
-            state.Dependency = setObjects.Schedule(__animationGroup, jobHandle);
+            setObjects.entityType = __entityType.UpdateAsRef(ref state);
+            setObjects.instanceType = __instanceType.UpdateAsRef(ref state);
+            setObjects.entityParentType = __entityParentType.UpdateAsRef(ref state);
+            setObjects.animationObjects = animationObjects;
+            state.Dependency = setObjects.ScheduleByRef(__animationGroup, jobHandle);
         }
     }
 
@@ -517,57 +541,49 @@ namespace ZG
         private EntityQuery __groupToDestroy;
         private EntityQuery __groupToCreate;
 
+        private ComponentTypeHandle<MeshInstanceHybridAnimationObjectInfo> __infoType;
+
+        private BufferLookup<HybridAnimationObject> __targets;
+
+        private BufferLookup<EntityParent> __entityParents;
+
+        private ComponentLookup<MeshInstanceRigData> __rigs;
+
+        private ComponentLookup<MeshInstanceHybridAnimationObjectData> __instances;
+
+        private ComponentLookup<MeshInstanceHybridAnimationObjectInfo> __infos;
+
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            __groupToDestroy = state.GetEntityQuery(
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceHybridAnimationObjectInfo>()
-                    },
-                    None = new ComponentType[]
-                    {
-                        typeof(MeshInstanceHybridAnimationObjectData)
-                    },
-                    //Options = EntityQueryOptions.IncludeDisabled
-                }/*,
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceHybridAnimationObjectInfo>(),
-                        ComponentType.ReadOnly<MeshInstanceHybridAnimationObjectData>(),
-                    },
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __groupToDestroy = builder
+                    .WithAll<MeshInstanceHybridAnimationObjectInfo>()
+                    .WithNone<MeshInstanceHybridAnimationObjectData>()
+                    .Build(ref state);
 
-                    Any = new ComponentType[]
-                    {
-                        typeof(MeshInstanceHybridAnimationDisabled)
-                    },
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __groupToCreate = builder
+                    .WithAll<MeshInstanceHybridAnimationObjectData>()
+                    .WithNone<MeshInstanceHybridAnimationObjectInfo>()
+                    .Build(ref state);
 
-                    Options = EntityQueryOptions.IncludeDisabled
-                }*/);
+            __infoType = state.GetComponentTypeHandle<MeshInstanceHybridAnimationObjectInfo>(true);
+            __targets = state.GetBufferLookup<HybridAnimationObject>();
 
-            __groupToCreate = state.GetEntityQuery(new EntityQueryDesc()
-            {
-                All = new ComponentType[]
-                {
-                    ComponentType.ReadOnly<MeshInstanceHybridAnimationObjectData>()
-                },
-                None = new ComponentType[]
-                {
-                    typeof(MeshInstanceHybridAnimationObjectInfo),
-                    //typeof(MeshInstanceHybridAnimationDisabled)
-                },
-                //Options = EntityQueryOptions.IncludeDisabled
-            });
+            __entityParents = state.GetBufferLookup<EntityParent>(true);
+            __rigs = state.GetComponentLookup<MeshInstanceRigData>(true);
+            __instances = state.GetComponentLookup<MeshInstanceHybridAnimationObjectData>(true);
+            __infos = state.GetComponentLookup<MeshInstanceHybridAnimationObjectInfo>();
         }
 
+        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
 
         }
 
+        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var entityManager = state.EntityManager;
@@ -576,7 +592,7 @@ namespace ZG
             DestroyEx destroy;
             destroy.infoType = state.GetComponentTypeHandle<MeshInstanceHybridAnimationObjectInfo>(true);
             destroy.targets = state.GetBufferLookup<HybridAnimationObject>();
-            destroy.Run(__groupToDestroy);
+            destroy.RunByRef(__groupToDestroy);
 
             entityManager.RemoveComponent<MeshInstanceHybridAnimationObjectInfo>(__groupToDestroy);
 
@@ -585,12 +601,12 @@ namespace ZG
 
             Create create;
             create.entityArray = entityArray;
-            create.entityParents = state.GetBufferLookup<EntityParent>(true);
-            create.rigs = state.GetComponentLookup<MeshInstanceRigData>(true);
-            create.instances = state.GetComponentLookup<MeshInstanceHybridAnimationObjectData>(true);
-            create.infos = state.GetComponentLookup<MeshInstanceHybridAnimationObjectInfo>();
+            create.entityParents = __entityParents.UpdateAsRef(ref state);
+            create.rigs = __rigs.UpdateAsRef(ref state);
+            create.instances = __instances.UpdateAsRef(ref state);
+            create.infos = __infos.UpdateAsRef(ref state);
 
-            state.Dependency = create.Schedule(entityArray.Length, InnerloopBatchCount, state.Dependency);
+            state.Dependency = create.ScheduleByRef(entityArray.Length, InnerloopBatchCount, state.Dependency);
         }
     }
 }
