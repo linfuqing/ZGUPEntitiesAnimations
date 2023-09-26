@@ -462,7 +462,7 @@ namespace ZG
         }
     }
 
-    [UpdateInGroup(typeof(MeshInstanceSystemGroup), OrderLast = true)]
+    [BurstCompile, UpdateInGroup(typeof(MeshInstanceSystemGroup), OrderLast = true)]
     public partial struct MeshInstanceHybridAnimationClearSystem : ISystem
     {
         private struct Destroy
