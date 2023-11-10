@@ -1008,10 +1008,11 @@ namespace ZG
                 {
                     using (var reader = new MemoryBinaryReader(ptr, _bytes.LongLength))
                     {
+                        __definition = reader.Read<MeshInstanceAnimatorDefinition>();
+
                         int instanceID = __definition.GetHashCode();
 
-                        __definition = reader.Read<MeshInstanceAnimatorDefinition>();
-                        //__definition.Value.instanceID = instanceID;
+                        __definition.Value.instanceID = instanceID;
 
                         __weightMaskDefinitions = new BlobAssetReference<MotionClipWeightMaskDefinition>[_weightMaskDefinitionCount];
                         for (int i = 0; i < _weightMaskDefinitionCount; ++i)
@@ -1022,7 +1023,7 @@ namespace ZG
                         {
                             __controllerDefinitions[i] = reader.Read<AnimatorControllerDefinition>();
 
-                            //__controllerDefinitions[i].Value.instanceID = instanceID;
+                            __controllerDefinitions[i].Value.instanceID = instanceID;
                         }
 
                         __rigRemapTables = new BlobAssetReference<RigRemapTable>[_rigRemapTableCount];
