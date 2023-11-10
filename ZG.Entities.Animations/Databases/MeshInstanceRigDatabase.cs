@@ -1223,6 +1223,7 @@ namespace ZG
                         using (var reader = new MemoryBinaryReader(ptr, __bytes.LongLength))
                         {
                             __definition = reader.Read<MeshInstanceRigDefinition>();
+                            __definition.Value.instanceID = __definition.GetHashCode();
 
                             __rigs = new BlobAssetReference<RigDefinition>[__rigCount];
                             for (int i = 0; i < __rigCount; ++i)

@@ -1009,6 +1009,7 @@ namespace ZG
                     using (var reader = new MemoryBinaryReader(ptr, _bytes.LongLength))
                     {
                         __definition = reader.Read<MeshInstanceAnimatorDefinition>();
+                        __definition.Value.instanceID = __definition.GetHashCode();
 
                         __weightMaskDefinitions = new BlobAssetReference<MotionClipWeightMaskDefinition>[_weightMaskDefinitionCount];
                         for (int i = 0; i < _weightMaskDefinitionCount; ++i)

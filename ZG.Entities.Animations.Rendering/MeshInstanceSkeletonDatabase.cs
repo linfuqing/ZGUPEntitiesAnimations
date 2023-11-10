@@ -982,6 +982,7 @@ namespace ZG
                     using (var reader = new MemoryBinaryReader(ptr, __bytes.LongLength))
                     {
                         __definition = reader.Read<MeshInstanceSkeletonDefinition>();
+                        __definition.Value.instanceID = __definition.GetHashCode();
                     }
                 }
 

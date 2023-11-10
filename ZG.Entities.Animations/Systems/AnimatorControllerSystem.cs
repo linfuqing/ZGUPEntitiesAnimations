@@ -1843,7 +1843,7 @@ namespace ZG
                 //ComponentType.ReadWrite<MotionClipTime>(),
                 ComponentType.ReadWrite<MotionClipWeight>());*/
 
-            __motions = SingletonAssetContainer<UnsafeUntypedBlobAssetReference>.instance;
+            __motions = SingletonAssetContainer<UnsafeUntypedBlobAssetReference>.Retain();
             __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.instance;
             __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.instance;
             __rigRemapTables = SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.instance;
@@ -1865,6 +1865,7 @@ namespace ZG
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
+            __motions.Release();
         }
 
         [BurstCompile]

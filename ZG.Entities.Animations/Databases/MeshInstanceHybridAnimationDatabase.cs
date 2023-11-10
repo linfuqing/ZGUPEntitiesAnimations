@@ -486,7 +486,7 @@ namespace ZG
                 var container = SingletonAssetContainer<int>.instance;
 
                 SingletonAssetContainerHandle handle;
-                handle.instanceID = GetInstanceID();
+                handle.instanceID = __definition.Value.instanceID;
 
                 for(int i = 0; i < length; ++i)
                 {
@@ -509,7 +509,7 @@ namespace ZG
                 var container = SingletonAssetContainer<BlobAssetReference<HybridAnimationDefinition>>.instance;
 
                 SingletonAssetContainerHandle handle;
-                handle.instanceID = GetInstanceID();
+                handle.instanceID = __definition.Value.instanceID;
 
                 for (int i = 0; i < __animationCount; ++i)
                 {

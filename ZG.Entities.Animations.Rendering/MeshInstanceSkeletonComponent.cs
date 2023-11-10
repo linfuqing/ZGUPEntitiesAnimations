@@ -60,6 +60,28 @@ namespace ZG
             MeshInstanceSkeletonData instance;
             instance.definition = _database.definition;
 
+#if DEBUG
+            var database = GetComponent<MeshInstanceRendererComponent>().database;
+            ref var rendererDefinition = ref database.definition.Value;
+            ref var defintion = ref instance.definition.Value;
+            int numInstances = defintion.instances.Length, numRenderers, boneCount, bindposeCount, i, j;
+            for (i = 0; i < numInstances; ++i)
+            {
+                ref var temp = ref defintion.instances[i];
+                ref var skeleton = ref defintion.skeletons[temp.skeletionIndex];
+                boneCount = skeleton.bones.Length + skeleton.indirectBones.Length;
+
+                numRenderers = temp.rendererIndices.Length;
+                for (j = 0; j < numRenderers; ++j)
+                {
+                    bindposeCount = database.meshes[rendererDefinition.renderers[rendererDefinition.nodes[j].rendererIndex].meshIndex].bindposeCount;
+
+                    if(bindposeCount != boneCount)
+                        Debug.LogError("Bone Index Out Range Of Skeleton!", this);
+                }
+            }
+#endif
+
             assigner.SetComponentData(entity, instance);
         }
     }

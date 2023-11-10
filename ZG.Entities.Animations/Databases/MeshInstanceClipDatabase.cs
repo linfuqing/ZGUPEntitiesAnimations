@@ -1414,6 +1414,7 @@ namespace ZG
                     using (var reader = new MemoryBinaryReader(ptr, _bytes.LongLength))
                     {
                         __factory = reader.Read<MeshInstanceClipFactoryDefinition>();
+                        __factory.Value.instanceID = __factory.GetHashCode();
                         __definition = reader.Read<MeshInstanceClipDefinition>();
 
                         __rigRemapTables = new BlobAssetReference<RigRemapTable>[_rigRemapTableCount];
