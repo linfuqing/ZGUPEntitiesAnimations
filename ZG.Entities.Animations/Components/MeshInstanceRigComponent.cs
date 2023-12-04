@@ -58,14 +58,12 @@ namespace ZG
 
         protected void OnEnable()
         {
-            if (gameObjectEntity.isCreated)
-                this.RemoveComponent<MeshInstanceRigDisabled>();
+            this.RemoveComponent<MeshInstanceRigDisabled>();
         }
 
         protected void OnDisable()
         {
-            if (gameObjectEntity.isAssigned)
-                this.AddComponent<MeshInstanceRigDisabled>();
+            this.AddComponent<MeshInstanceRigDisabled>();
         }
 
         void IEntityComponent.Init(in Entity entity, EntityComponentAssigner assigner)
