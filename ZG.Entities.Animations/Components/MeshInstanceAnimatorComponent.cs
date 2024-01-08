@@ -96,9 +96,6 @@ namespace ZG
 
         public int GetInteger(int id)
         {
-            if (!gameObjectEntity.isCreated)
-                return 0;
-
             StringHash name;
             name.Id = (uint)id;
 
@@ -120,10 +117,6 @@ namespace ZG
 
         public void SetInteger(int id, int value)
         {
-            var gameObjectEntity = base.gameObjectEntity;
-            if (!gameObjectEntity.isCreated)
-                return;
-
             MeshInstanceAnimatorParameterCommand command;
             command.name.Id = (uint)id;
             command.value = value;

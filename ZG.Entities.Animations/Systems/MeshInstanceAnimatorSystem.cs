@@ -61,14 +61,11 @@ namespace ZG
         public int value;
     }
 
-    [BurstCompile, UpdateInGroup(typeof(MeshInstanceSystemGroup), OrderFirst = true), UpdateAfter(typeof(MeshInstanceRigFactorySystem))]
-    public partial struct MeshInstanceAnimatorFactorySystem : ISystem
+    [BurstCompile, 
+        UpdateInGroup(typeof(MeshInstanceSystemGroup)), 
+        UpdateAfter(typeof(MeshInstanceRigSystem))]
+    public partial struct MeshInstanceAnimatorSystem : ISystem
     {
-        /*public struct Prefab
-        {
-            public int count;
-        }*/
-
         private struct Result
         {
             public int rigIndex;
@@ -120,13 +117,16 @@ namespace ZG
         private struct Collect
         {
             [ReadOnly]
-            public SharedHashMap<int, BlobAssetReference<MeshInstanceRigPrefab>>.Reader rigPrefabs;
-
-            [ReadOnly]
             public ComponentLookup<MotionClipData> clips;
 
             [ReadOnly]
             public ComponentLookup<MeshInstanceRigID> rigIDMap;
+
+            [ReadOnly]
+            public BufferLookup<MeshInstanceRig> rigMap;
+
+            [ReadOnly]
+            public BufferAccessor<MeshInstanceRig> rigs;
 
             [ReadOnly]
             public NativeArray<MeshInstanceRigID> rigIDs;
@@ -137,9 +137,9 @@ namespace ZG
             [ReadOnly]
             public BufferAccessor<EntityParent> entityParents;
 
-            public UnsafeListEx<Entity> weightMaskEntities;
+            public NativeList<Entity> weightMaskEntities;
 
-            public UnsafeListEx<Result> results;
+            public NativeList<Result> results;
 
             public int Execute(int index)
             {
@@ -148,43 +148,32 @@ namespace ZG
 
                 ref var definition = ref result.definition.Value;
 
-                if (index < rigIDs.Length)
+                DynamicBuffer<MeshInstanceRig> rigs;
+                if (index < this.rigs.Length)
+                {
+                    rigs = this.rigs[index];
+
                     result.rigInstanceID = rigIDs[index].value;
+                }
                 else
                 {
-                    Entity parentEntity = EntityParent.Get(entityParents[index], rigIDMap);
+                    Entity parentEntity = EntityParent.Get(entityParents[index], rigMap);
                     if (parentEntity == Entity.Null)
                         return definition.instanceID;
 
+                    rigs = this.rigMap[parentEntity];
                     result.rigInstanceID = rigIDMap[parentEntity].value;
                 }
-
-                /*if (prefabs.TryGetValue(definition.instanceID, out var prefab))
-                {
-                    ++prefab.count;
-
-                    prefabs[definition.instanceID] = prefab;
-                }
-                else
-                {
-                    prefab.count = 1;
-                    prefabs.Add(definition.instanceID, prefab);
-
-                }*/
-
-                //��Rig���ر��ٴ�ʱ��Ҳ�����ã����Բ���ʹ��Prefab
-
-                ref var rigPrefab = ref rigPrefabs[result.rigInstanceID].Value;
 
                 int numRigs = definition.rigs.Length, numResults, i, j;
                 for (i = 0; i < numRigs; ++i)
                 {
                     ref var rig = ref definition.rigs[i];
-                    result.entity = rigPrefab.rigs[rig.index].entity;
+                    result.entity = rigs[rig.index].entity;
                     if (clips.HasComponent(result.entity))
                         continue;
 
-                    numResults = results.length;
+                    numResults = results.Length;
                     for(j = 0; j < numResults; ++j)
                     {
                         if (results.ElementAt(j).entity == result.entity)
@@ -209,13 +198,16 @@ namespace ZG
         private struct CollectEx : IJobChunk
         {
             [ReadOnly]
-            public SharedHashMap<int, BlobAssetReference<MeshInstanceRigPrefab>>.Reader rigPrefabs;
-
-            [ReadOnly]
             public ComponentLookup<MotionClipData> clips;
 
             [ReadOnly]
             public ComponentLookup<MeshInstanceRigID> rigIDs;
+
+            [ReadOnly]
+            public BufferLookup<MeshInstanceRig> rigs;
+
+            [ReadOnly]
+            public BufferTypeHandle<MeshInstanceRig> rigType;
 
             [ReadOnly]
             public ComponentTypeHandle<MeshInstanceRigID> rigIDType;
@@ -231,18 +223,19 @@ namespace ZG
 
             public NativeArray<MeshInstanceAnimatorID> ids;
 
-            public UnsafeListEx<Entity> weightMaskEntities;
+            public NativeList<Entity> weightMaskEntities;
 
             //public SharedHashMap<int, Prefab>.Writer prefabs;
 
-            public UnsafeListEx<Result> results;
+            public NativeList<Result> results;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 Collect collect;
                 collect.clips = clips;
-                collect.rigPrefabs = rigPrefabs;
                 collect.rigIDMap = rigIDs;
+                collect.rigMap = rigs;
+                collect.rigs = chunk.GetBufferAccessor(ref rigType);
                 collect.rigIDs = chunk.GetNativeArray(ref rigIDType);
                 collect.instances = chunk.GetNativeArray(ref instanceType);
                 collect.entityParents = chunk.GetBufferAccessor(ref entityParentType);
@@ -267,7 +260,7 @@ namespace ZG
         private struct Init : IJobParallelFor
         {
             [ReadOnly]
-            public UnsafeListEx<Result> results;
+            public NativeArray<Result> results;
 
             [ReadOnly]
             public SingletonAssetContainer<BlobAssetReference<AnimatorControllerDefinition>>.Reader controllers;
@@ -276,13 +269,13 @@ namespace ZG
             public SingletonAssetContainer<BlobAssetReference<MotionClipWeightMaskDefinition>>.Reader weightMasks;
 
             [NativeDisableParallelForRestriction]
-            public BufferLookup<MotionClipLayerWeightMask> layerWeightMasks;
+            public ComponentLookup<MotionClipData> clips;
 
             [NativeDisableParallelForRestriction]
             public ComponentLookup<AnimatorControllerData> instances;
 
             [NativeDisableParallelForRestriction]
-            public ComponentLookup<MotionClipData> clips;
+            public BufferLookup<MotionClipLayerWeightMask> layerWeightMasks;
 
             [NativeDisableParallelForRestriction]
             public BufferLookup<MotionClipLayer> layers;
@@ -340,17 +333,6 @@ namespace ZG
             }
         }
 
-        [BurstCompile]
-        private struct DisposeAll : IJob
-        {
-            public UnsafeListEx<Result> results;
-
-            public void Execute()
-            {
-                results.Dispose();
-            }
-        }
-
         public static readonly int InnerloopBatchCount = 1;
 
         private ComponentTypeSet __rigComponentTypes;
@@ -358,7 +340,26 @@ namespace ZG
         private EntityQuery __groupToDestroy;
         private EntityQuery __groupToCreate;
 
-        private SharedHashMap<int, BlobAssetReference<MeshInstanceRigPrefab>> __rigPrefabs;
+        private ComponentLookup<MotionClipData> __clips;
+
+        private ComponentLookup<MeshInstanceRigID> __rigIDs;
+
+        private BufferLookup<MeshInstanceRig> __rigs;
+
+        private BufferTypeHandle<MeshInstanceRig> __rigType;
+
+        private ComponentTypeHandle<MeshInstanceRigID> __rigIDType;
+
+        private ComponentTypeHandle<MeshInstanceAnimatorData> __instanceType;
+
+        private BufferTypeHandle<EntityParent> __entityParentType;
+
+        private BufferLookup<MotionClipLayerWeightMask> __layerWeightMasks;
+
+        private BufferLookup<MotionClipLayer> __layers;
+
+        private ComponentLookup<AnimatorControllerData> __instances;
+
         private SingletonAssetContainer<BlobAssetReference<AnimatorControllerDefinition>> __controllers;
         private SingletonAssetContainer<BlobAssetReference<MotionClipWeightMaskDefinition>> __weightMasks;
 
@@ -369,79 +370,62 @@ namespace ZG
             private set;
         }*/
 
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            BurstUtility.InitializeJobParallelFor<Init>();
-            BurstUtility.InitializeJob<DisposeAll>();
+            __rigComponentTypes = new ComponentTypeSet(new FixedList128Bytes<ComponentType>()
+            {
+                ComponentType.ReadOnly<EntityObjects>(),
+                ComponentType.ReadOnly<AnimatorControllerData>(),
+                ComponentType.ReadOnly<MotionClipData>(),
+                ComponentType.ReadWrite<MotionClip>(),
+                ComponentType.ReadWrite<MotionClipTime>(),
+                ComponentType.ReadWrite<MotionClipWeight>(),
+                ComponentType.ReadWrite<MotionClipLayer>(),
+                //ComponentType.ReadWrite<AnimatorControllerParameterCommand>(),
+                ComponentType.ReadWrite<AnimatorControllerParameter>(),
+                ComponentType.ReadWrite<AnimatorControllerEvent>(),
+                ComponentType.ReadWrite<AnimatorControllerStateMachine>()
+            });
 
-            __rigComponentTypes = new ComponentTypeSet(
-                new ComponentType[]
-                {
-                    ComponentType.ReadOnly<EntityObjects>(), 
-                    ComponentType.ReadOnly<AnimatorControllerData>(),
-                    ComponentType.ReadOnly<MotionClipData>(),
-                    ComponentType.ReadWrite<MotionClip>(),
-                    ComponentType.ReadWrite<MotionClipTime>(),
-                    ComponentType.ReadWrite<MotionClipWeight>(),
-                    ComponentType.ReadWrite<MotionClipLayer>(),
-                    //ComponentType.ReadWrite<AnimatorControllerParameterCommand>(),
-                    ComponentType.ReadWrite<AnimatorControllerParameter>(),
-                    ComponentType.ReadWrite<AnimatorControllerEvent>(),
-                    ComponentType.ReadWrite<AnimatorControllerStateMachine>()
-                });
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __groupToDestroy = builder
+                    .WithAll<MeshInstanceAnimatorID>()
+                    .WithNone<MeshInstanceRig>()
+                    .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                    .Build(ref state);
 
-            __groupToDestroy = state.GetEntityQuery(
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceAnimatorID>()
-                    },
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __groupToCreate = builder
+                        .WithAll<MeshInstanceAnimatorData, MeshInstanceRig>()
+                        .WithNone<MeshInstanceAnimatorID>()
+                        .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                        .Build(ref state);
 
-                    None = new ComponentType[]
-                    {
-                        typeof(MeshInstanceAnimatorData)
-                    }
-                },
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceAnimatorID>(),
-                        ComponentType.ReadOnly<MeshInstanceAnimatorData>()
-                    },
-                    Any = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceRigDisabled>()
-                    },
-                    Options = EntityQueryOptions.IncludeDisabledEntities
-                });
+            __clips = state.GetComponentLookup<MotionClipData>();
 
-            __groupToCreate = state.GetEntityQuery(
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceAnimatorData>()
-                    },
-                    None = new ComponentType[]
-                    {
-                        typeof(MeshInstanceAnimatorID),
-                        typeof(MeshInstanceRigDisabled)
-                    },
-                    Options = EntityQueryOptions.IncludeDisabledEntities
-                });
+            __rigIDs = state.GetComponentLookup<MeshInstanceRigID>(true);
+            __rigs = state.GetBufferLookup<MeshInstanceRig>(true);
+            __rigType = state.GetBufferTypeHandle<MeshInstanceRig>(true);
+            __rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
+            __instanceType = state.GetComponentTypeHandle<MeshInstanceAnimatorData>(true);
+            __rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
+            __entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
+            __layerWeightMasks = state.GetBufferLookup<MotionClipLayerWeightMask>();
+            __layers = state.GetBufferLookup<MotionClipLayer>();
+            __instances = state.GetComponentLookup<AnimatorControllerData>();
 
-            __rigPrefabs = state.World.GetOrCreateSystemUnmanaged<MeshInstanceRigFactorySystem>().prefabs;
-            __controllers = SingletonAssetContainer<BlobAssetReference<AnimatorControllerDefinition>>.instance;
-            __weightMasks = SingletonAssetContainer<BlobAssetReference<MotionClipWeightMaskDefinition>>.instance;
+            __controllers = SingletonAssetContainer<BlobAssetReference<AnimatorControllerDefinition>>.Retain();
+            __weightMasks = SingletonAssetContainer<BlobAssetReference<MotionClipWeightMaskDefinition>>.Retain();
 
             //prefabs = new SharedHashMap<int, Prefab>(Allocator.Persistent);
         }
 
+        //[BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            //prefabs.Dispose();
+            __controllers.Release();
+            __weightMasks.Release();
         }
 
         [BurstCompile]
@@ -452,72 +436,58 @@ namespace ZG
             var entityManager = state.EntityManager;
 
             if (!__groupToDestroy.IsEmptyIgnoreFilter)
-            {
-                /*state.CompleteDependency();
-                prefabs.lookupJobManager.CompleteReadWriteDependency();
-
-                CollectToDestroyEx collect;
-                collect.idType = state.GetComponentTypeHandle<MeshInstanceAnimatorID>(true);
-                collect.prefabs = writer;
-                collect.RunBurstCompatible(__groupToDestroy);*/
-
                 entityManager.RemoveComponent<MeshInstanceAnimatorID>(__groupToDestroy);
-            }
 
             int entityCount = __groupToCreate.CalculateEntityCount();
             if (entityCount > 0)
             {
-                var results = new UnsafeListEx<Result>(Allocator.TempJob);
+                var results = new NativeList<Result>(Allocator.TempJob);
 
                 using (var ids = new NativeArray<MeshInstanceAnimatorID>(entityCount, Allocator.TempJob))
-                using(var weightMaskEntities = new UnsafeListEx<Entity>(Allocator.TempJob))
+                using(var weightMaskEntities = new NativeList<Entity>(Allocator.TempJob))
                 {
                     state.CompleteDependency();
-                    __rigPrefabs.lookupJobManager.CompleteReadOnlyDependency();
-                    //prefabs.lookupJobManager.CompleteReadWriteDependency();
 
                     CollectEx collect;
-                    collect.rigPrefabs = __rigPrefabs.reader;
-                    collect.rigIDs = state.GetComponentLookup<MeshInstanceRigID>(true);
-                    collect.clips = state.GetComponentLookup<MotionClipData>(true);
-                    collect.instanceType = state.GetComponentTypeHandle<MeshInstanceAnimatorData>(true);
-                    collect.rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
-                    collect.entityParentType = state.GetBufferTypeHandle<EntityParent>(true);
+                    collect.clips = __clips.UpdateAsRef(ref state);
+                    collect.rigIDs = __rigIDs.UpdateAsRef(ref state);
+                    collect.rigs = __rigs.UpdateAsRef(ref state);
+                    collect.rigType = __rigType.UpdateAsRef(ref state);
+                    collect.rigIDType = __rigIDType.UpdateAsRef(ref state);
+                    collect.instanceType = __instanceType.UpdateAsRef(ref state);
+                    collect.entityParentType = __entityParentType.UpdateAsRef(ref state);
                     collect.baseEntityIndexArray = __groupToCreate.CalculateBaseEntityIndexArray(Allocator.TempJob);
                     collect.ids = ids;
                     collect.weightMaskEntities = weightMaskEntities;
                     //collect.prefabs = writer;
                     collect.results = results;
 
-                    collect.Run(__groupToCreate);
+                    collect.RunByRef(__groupToCreate);
 
-                    entityManager.AddComponentDataBurstCompatible(__groupToCreate, ids);
-                    entityManager.AddComponentBurstCompatible<MotionClipLayerWeightMask>(weightMaskEntities.AsArray());
+                    entityManager.AddComponentData(__groupToCreate, ids);
+                    entityManager.AddComponent<MotionClipLayerWeightMask>(weightMaskEntities.AsArray());
                 }
 
-                int numResults = results.length;
+                int numResults = results.Length;
                 for (int i = 0; i < numResults; ++i)
                     entityManager.AddComponent(results.ElementAt(i).entity, __rigComponentTypes);
 
                 Init init;
-                init.results = results;
+                init.results = results.AsArray();
                 init.controllers = __controllers.reader;
                 init.weightMasks = __weightMasks.reader;
-                init.layerWeightMasks = state.GetBufferLookup<MotionClipLayerWeightMask>();
-                init.instances = state.GetComponentLookup<AnimatorControllerData>();
-                init.clips = state.GetComponentLookup<MotionClipData>();
-                init.layers = state.GetBufferLookup<MotionClipLayer>();
+                init.clips = __clips.UpdateAsRef(ref state);
+                init.instances = __instances.UpdateAsRef(ref state);
+                init.layerWeightMasks = __layerWeightMasks.UpdateAsRef(ref state);
+                init.layers = __layers.UpdateAsRef(ref state);
 
-                var jobHandle = init.Schedule(results.length, InnerloopBatchCount, state.Dependency);
+                var jobHandle = init.ScheduleByRef(results.Length, InnerloopBatchCount, state.Dependency);
 
                 int systemID = state.GetSystemID();
                 __controllers.AddDependency(systemID, jobHandle);
                 __weightMasks.AddDependency(systemID, jobHandle);
 
-                DisposeAll disposeAll;
-                disposeAll.results = results;
-
-                state.Dependency = disposeAll.Schedule(jobHandle);
+                state.Dependency = results.Dispose(jobHandle);
             }
         }
     }
@@ -635,18 +605,15 @@ namespace ZG
         private BufferTypeHandle<MeshInstanceAnimatorParameterCommand> __commandType;
         private BufferLookup<AnimatorControllerParameter> __parameters;
 
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            __group = state.GetEntityQuery(
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceRig>(),
-                        ComponentType.ReadWrite<MeshInstanceAnimatorParameterCommand>()
-                    },
-                    Options = EntityQueryOptions.IncludeDisabledEntities
-                });
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __group = builder
+                        .WithAll<MeshInstanceRig>()
+                        .WithAllRW<MeshInstanceAnimatorParameterCommand>()
+                        .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                        .Build(ref state);
 
             __instances = state.GetComponentLookup<AnimatorControllerData>(true);
             __rigType = state.GetBufferTypeHandle<MeshInstanceRig>(true);
@@ -654,6 +621,7 @@ namespace ZG
             __parameters = state.GetBufferLookup<AnimatorControllerParameter>();
         }
 
+        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
 
