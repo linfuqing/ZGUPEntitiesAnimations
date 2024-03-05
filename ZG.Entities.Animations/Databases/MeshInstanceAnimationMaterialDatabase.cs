@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Unity.Entities.Serialization;
 using Unity.Entities;
 using UnityEngine;
-using ZG;
 using HybridRenderer = UnityEngine.Renderer;
 
 #if UNITY_EDITOR
@@ -158,7 +157,7 @@ namespace ZG
                     ref var root = ref builder.ConstructRoot<MeshInstanceAnimationMaterialDefinition>();
                     root.instanceID = instanceID;
                     root.materialPropertyCount = 0;
-                    root.materialPropertySzie = 0;
+                    root.materialPropertySize = 0;
 
                     int i, j, k, numChannelIndices, numMaterialProperties, numRenderers = this.renderers.Length;
                     BlobBuilderArray<int> channelIndices;
@@ -188,7 +187,7 @@ namespace ZG
                             for (k = 0; k < numChannelIndices; ++k)
                                 channelIndices[k] = sourceMaterialProperty.channelIndices[k];
 
-                            root.materialPropertySzie += numChannelIndices * Unity.Collections.LowLevel.Unsafe.UnsafeUtility.SizeOf<float>();
+                            root.materialPropertySize += numChannelIndices * Unity.Collections.LowLevel.Unsafe.UnsafeUtility.SizeOf<float>();
                         }
 
                         root.materialPropertyCount += numMaterialProperties;

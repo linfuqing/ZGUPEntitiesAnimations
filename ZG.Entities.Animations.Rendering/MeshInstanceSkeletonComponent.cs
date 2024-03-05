@@ -74,7 +74,7 @@ namespace ZG
                 numRenderers = temp.rendererIndices.Length;
                 for (j = 0; j < numRenderers; ++j)
                 {
-                    bindposeCount = database.meshes[rendererDefinition.renderers[rendererDefinition.nodes[j].rendererIndex].meshIndex].bindposeCount;
+                    bindposeCount = database.meshes[rendererDefinition.renderers[rendererDefinition.nodes[temp.rendererIndices[j]].rendererIndex].meshIndex].bindposeCount;
 
                     if(bindposeCount != boneCount)
                         Debug.LogError("Bone Index Out Range Of Skeleton!", this);

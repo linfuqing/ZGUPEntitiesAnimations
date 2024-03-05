@@ -382,7 +382,7 @@ namespace ZG
 
                                 if (temp == null)
                                 {
-                                    UnityEngine.Debug.LogError($"Ttransform Path: {transformPath} can not been found.");
+                                    UnityEngine.Debug.LogError($"{root.root} transform Path: {transformPath} can not been found.", root.root);
 
                                     transform = EntityObject<Transform>.Null;
                                 }

@@ -27,7 +27,7 @@ namespace ZG
 
         public int instanceID;
         public int materialPropertyCount;
-        public int materialPropertySzie;
+        public int materialPropertySize;
         public BlobArray<Renderer> renderers;
 
         public void Apply(
@@ -126,7 +126,7 @@ namespace ZG
             {
                 ref var defintion = ref instances[index].definition.Value;
                 typeCountAndBufferSize.Add(0, defintion.materialPropertyCount);
-                typeCountAndBufferSize.Add(1, defintion.materialPropertySzie);
+                typeCountAndBufferSize.Add(1, defintion.materialPropertySize);
             }
         }
 
@@ -292,7 +292,7 @@ namespace ZG
 
         private SharedHashMap<Entity, MeshInstanceRendererBuilder> __rendererBuilders;
 
-        private SingletonAssetContainer<TypeIndex> __typeIndcies;
+        private SingletonAssetContainer<TypeIndex> __typeIndices;
         private NativeArray<int> __typeCountAndBufferSize;
 
         [BurstCompile]
@@ -316,7 +316,7 @@ namespace ZG
 
             __rendererBuilders = state.WorldUnmanaged.GetExistingSystemUnmanaged<MeshInstanceRendererSystem>().builders;
 
-            __typeIndcies = SingletonAssetContainer<TypeIndex>.Retain();
+            __typeIndices = SingletonAssetContainer<TypeIndex>.Retain();
 
             __typeCountAndBufferSize = new NativeArray<int>(2, Allocator.Persistent);
         }
@@ -326,7 +326,7 @@ namespace ZG
         {
             __typeCountAndBufferSize.Dispose();
 
-            __typeIndcies.Release();
+            __typeIndices.Release();
         }
 
         [BurstCompile]
@@ -341,7 +341,7 @@ namespace ZG
             var jobHandle = count.ScheduleParallelByRef(__group, state.Dependency);
 
             ApplyEx apply;
-            apply.typeIndices = __typeIndcies.reader;
+            apply.typeIndices = __typeIndices.reader;
             apply.entityType = __entityType.UpdateAsRef(ref state);
             apply.animations = __animations.UpdateAsRef(ref state);
             apply.instanceRigs = __instanceRigs.UpdateAsRef(ref state);
@@ -357,7 +357,7 @@ namespace ZG
 
             jobHandle = apply.ScheduleParallelByRef(__group, Unity.Jobs.JobHandle.CombineDependencies(lookupJobManager.readOnlyJobHandle, jobHandle));
 
-            __typeIndcies.AddDependency(state.GetSystemID(), jobHandle);
+            __typeIndices.AddDependency(state.GetSystemID(), jobHandle);
 
             lookupJobManager.AddReadOnlyDependency(jobHandle);
 
