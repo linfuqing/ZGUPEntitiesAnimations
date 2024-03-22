@@ -17,7 +17,12 @@ namespace ZG
 
         internal UnityEngine.Transform _parent;
 
-        public override void OnPlayableDestroy(Playable playable)
+        ~MeshInstanceClipTrackMixer()
+        {
+            Dispose();
+        }
+
+        public void Dispose()
         {
             object playerObject = __player;
             if (playerObject != null)
@@ -29,6 +34,11 @@ namespace ZG
 
                 __player = null;
             }
+        }
+
+        public override void OnPlayableDestroy(Playable playable)
+        {
+            Dispose();
         }
 
         public override void ProcessFrame(Playable playable, FrameData info, object playerData)
