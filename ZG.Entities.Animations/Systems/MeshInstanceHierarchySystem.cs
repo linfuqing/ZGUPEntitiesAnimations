@@ -95,9 +95,9 @@ namespace ZG
             public void Execute(int index)
             {
                 Entity parentEntity = Entity.Null;
-                if (!hasRig && index >= entityParents.Length)
+                if (!hasRig)
                 {
-                    parentEntity = EntityParent.Get(entityParents[index], rigMap);
+                    parentEntity = index < entityParents.Length ? EntityParent.Get(entityParents[index], rigMap) : Entity.Null;
                     if(parentEntity == Entity.Null)
                         return;
                 }

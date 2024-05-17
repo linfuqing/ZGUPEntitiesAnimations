@@ -157,11 +157,11 @@ namespace ZG
                 }
                 else
                 {
-                    Entity parentEntity = EntityParent.Get(entityParents[index], rigMap);
+                    Entity parentEntity = index < entityParents.Length ? EntityParent.Get(entityParents[index], rigMap) : Entity.Null;
                     if (parentEntity == Entity.Null)
                         return definition.instanceID;
 
-                    rigs = this.rigMap[parentEntity];
+                    rigs = rigMap[parentEntity];
                     result.rigInstanceID = rigIDMap[parentEntity].value;
                 }
 
@@ -540,6 +540,10 @@ namespace ZG
                                 }
 
                                 parameters.ElementAt(parameterIndex).value = command.value;
+                                
+                                /*if((parameterIndex == 0 || parameterIndex == 4) && 
+                                   parametersDefinition[parameterIndex].type == AnimatorControllerParameterType.Trigger)
+                                    UnityEngine.Debug.Log($"Apply Anima {parameterIndex} : {command.value} : {rig.entity}");*/
                             }
 
                             isContains = true;

@@ -1168,7 +1168,7 @@ namespace ZG
                     rigs = this.rigs[index];
                 else
                 {
-                    var parentEntity = EntityParent.Get(entityParents[index], rigMap);
+                    var parentEntity = index < entityParents.Length ? EntityParent.Get(entityParents[index], rigMap) : Entity.Null;
                     if (parentEntity == Entity.Null)
                         return;
 

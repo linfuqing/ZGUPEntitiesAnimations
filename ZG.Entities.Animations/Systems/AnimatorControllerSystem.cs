@@ -59,6 +59,7 @@ namespace ZG
 
     public struct AnimatorControllerState
     {
+        [Flags]
         public enum Flag
         {
             None = 0,
@@ -125,6 +126,9 @@ namespace ZG
 
         public void StartTransition(int transitionIndex, int destinationStateIndex, float cycleOffset)
         {
+            //if(this.destinationStateIndex == 181)
+            //    UnityEngine.Debug.LogError($"StartTransition {transitionIndex} : {destinationStateIndex}");
+            
             this.destinationStateIndex = destinationStateIndex;
             destinationStateTime = cycleOffset;
             preDestinationStateTime = cycleOffset;
@@ -931,63 +935,6 @@ namespace ZG
                     }
                 }
             }
-
-            /*public static void __Evaluate(
-                MotionClipFlag flag,
-                MotionClipWrapMode wrapMode, 
-                int instanceID,
-                int rigInstanceID,
-                int remapIndex, 
-                int layerIndex, 
-                int depth, 
-                float speed,
-                float time,
-                float weight,
-                in BlobAssetReference<Unity.Animation.Clip> clip,
-                in SingletonAssetContainer<BlobAssetReference<RigDefinition>>.Reader rigDefinitions,
-                in SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.Reader rigRemapTables,
-                ref DynamicBuffer<MotionClip> outClips,
-                ref DynamicBuffer<MotionClipWeight> outWeights,
-                ref DynamicBuffer<MotionClipTime> outTimes,
-                ref BlobArray<Remap> remaps)
-            {
-                MotionClip result;
-
-                result.flag = flag;
-                result.wrapMode = wrapMode;
-                result.layerIndex = layerIndex;
-                result.depth = depth;
-                result.speed = speed;
-
-                result.value = clip;
-
-                if (remapIndex == -1)
-                {
-                    result.remapTable = default;
-                    result.remapDefinition = default;
-                }
-                else
-                {
-                    ref var remap = ref remaps[remapIndex];
-
-                    result.remapTable = rigRemapTables[new SingletonAssetContainerHandle(instanceID, remap.index)];
-                    result.remapDefinition = rigDefinitions[new SingletonAssetContainerHandle(rigInstanceID, remap.sourceRigIndex)];
-                }
-
-                outClips.Add(result);
-
-                MotionClipWeight clipWeight;
-                //clipWeight.version = MotionClipSystem.Version.Data;
-                clipWeight.value = weight;
-                outWeights.Add(clipWeight);
-
-                if (outTimes.IsCreated)
-                {
-                    MotionClipTime clipTime;
-                    clipTime.value = time;
-                    outTimes.Add(clipTime);
-                }
-            }*/
         }
 
         public struct Condition
@@ -1040,7 +987,7 @@ namespace ZG
                 }
             }
 
-            public readonly bool Judge(/*in UnsafeHashSet<int> triggerIndices, */in DynamicBuffer<AnimatorControllerParameter> values, ref BlobArray<Parameter> keys)
+            public readonly bool Judge(in UnsafeHashSet<int> parameterTriggerIndices, in DynamicBuffer<AnimatorControllerParameter> values, ref BlobArray<Parameter> keys)
             {
                 if (parameterIndex >= keys.Length)
                     return false;
@@ -1050,8 +997,8 @@ namespace ZG
                 {
                     case AnimatorControllerParameterType.Float:
                         return Judge(key.GetFloat(parameterIndex, values));
-                    /*case AnimatorControllerParameterType.Trigger:
-                        return Judge(triggerIndices.IsCreated && triggerIndices.Contains(parameterIndex) ? 0 : key.GetInt(parameterIndex, values));*/
+                    case AnimatorControllerParameterType.Trigger:
+                        return Judge(parameterTriggerIndices.IsCreated && parameterTriggerIndices.Contains(parameterIndex) ? 0 : key.GetInt(parameterIndex, values));
                     default:
                         return Judge(key.GetInt(parameterIndex, values));
                 }
@@ -1077,14 +1024,14 @@ namespace ZG
             public readonly bool canTransitionToSelf => (flag & AnimatorControllerTransitionFlag.CanTransitionToSelf) == AnimatorControllerTransitionFlag.CanTransitionToSelf;
 
             public bool Judge(
-                //in UnsafeHashSet<int> paramterTriggerIndices, 
-                in DynamicBuffer<AnimatorControllerParameter> paramterValues,
+                in UnsafeHashSet<int> parameterTriggerIndices, 
+                in DynamicBuffer<AnimatorControllerParameter> parameterValues,
                 ref BlobArray<Parameter> parameterKeys)
             {
                 int numConditions = conditions.Length;
                 for (int i = 0; i < numConditions; i++)
                 {
-                    if (!conditions[i].Judge(/*paramterTriggerIndices, */paramterValues, ref parameterKeys))
+                    if (!conditions[i].Judge(parameterTriggerIndices, parameterValues, ref parameterKeys))
                         return false;
                 }
 
@@ -1096,11 +1043,11 @@ namespace ZG
                 float averageMotionLength, 
                 float previousTime, 
                 float currentTime,
-                //in UnsafeHashSet<int> paramterTriggerIndices, 
-                in DynamicBuffer<AnimatorControllerParameter> paramterValues,
+                in UnsafeHashSet<int> parameterTriggerIndices, 
+                in DynamicBuffer<AnimatorControllerParameter> parameterValues,
                 ref BlobArray<Parameter> parameterKeys)
             {
-                if (!Judge(/*paramterTriggerIndices, */paramterValues, ref parameterKeys))
+                if (!Judge(parameterTriggerIndices, parameterValues, ref parameterKeys))
                     return false;
 
                 if (exitTime > math.FLT_MIN_NORMAL)
@@ -1225,7 +1172,7 @@ namespace ZG
             }
         }
 
-        public static ref Transition GetActiveTranstion(ref AnimatorControllerState state, ref StateMachine stateMachine)
+        public static ref Transition GetActiveTransition(ref AnimatorControllerState state, ref StateMachine stateMachine)
         {
             if (state.isActiveTransitionGlobal)
                 return ref stateMachine.globalTransitions[state.activeTransitionIndex];
@@ -1275,7 +1222,7 @@ namespace ZG
                         sourceStateMotionLength,
                         sourcePreviousStateTime,
                         state.sourceStateTime, 
-                        //parameterTriggerIndices, 
+                        parameterTriggerIndices, 
                         parameterValues,
                         ref parameterKeys))
                     {
@@ -1306,7 +1253,7 @@ namespace ZG
                             destinationStateMotionLength,
                             destinationPreviousStateTime,
                             state.destinationStateTime,
-                            //parameterTriggerIndices,
+                            parameterTriggerIndices,
                             parameterValues,
                             ref parameterKeys))
                         {
@@ -1351,60 +1298,66 @@ namespace ZG
 
                 state.sourceStateTime += sourceState.GetSpeed(ref this.parameters, parameters) * deltaTime;
 
-                numTransitions = state.isActiveTransitionGlobal && stateMachine.globalTransitions[state.activeTransitionIndex].isOrderedInterruption ?
-                    state.activeTransitionIndex : stateMachine.globalTransitions.Length;
-                for (i = 0; i < numTransitions; i++)
+                numTransitions = state.isActiveTransitionGlobal &&
+                                 stateMachine.globalTransitions[state.activeTransitionIndex].isOrderedInterruption
+                    ? state.activeTransitionIndex : stateMachine.globalTransitions.Length;
+                for (i = 0; i < numTransitions; ++i)
                 {
                     ref var transition = ref stateMachine.globalTransitions[i];
 
                     if (!transition.canTransitionToSelf &&
-                        (state.isActiveTransitionGlobal ?
-                        state.activeTransitionIndex == i :
-                        transition.destinationStateIndex == state.sourceStateIndex))
+                        (state.isActiveTransitionGlobal
+                            ? state.activeTransitionIndex == i
+                            : transition.destinationStateIndex == state.sourceStateIndex))
                         continue;
 
-                    if (!transition.Judge(/*parameterTriggerIndices, */parameters, ref this.parameters))
+                    if (!transition.Judge(parameterTriggerIndices, parameters, ref this.parameters))
                         continue;
 
                     transition.CollectParameterTriggers(ref this.parameters, ref parameterTriggerIndices);
 
                     averageMotionLength = stateMachine.states[transition.destinationStateIndex].motionAverageLength;
 
-                    state.StartTransition(i, transition.destinationStateIndex, transition.offset * averageMotionLength);
+                    state.StartTransition(i, transition.destinationStateIndex,
+                        transition.offset * averageMotionLength);
                     state.flag |= AnimatorControllerState.Flag.IsActiveTransitionGlobal;
 
                     break;
                 }
-
+                
                 if (!state.isInTransition)
                 {
-                    numTransitions = sourceState.transitions.Length;
-                    for (i = 0; i < numTransitions; i++)
+                    numTransitions = state.isActiveTransitionFromSourceState &&
+                                     sourceState.transitions[state.activeTransitionIndex].isOrderedInterruption
+                        ? state.activeTransitionIndex : sourceState.transitions.Length;
+                    for (i = 0; i < numTransitions; ++i)
                     {
                         ref var transition = ref sourceState.transitions[i];
                         if (transition.Judge(
-                            sourceState.wrapMode,
-                            sourceState.motionAverageLength,
-                            state.preSourceStateTime,
-                            state.sourceStateTime,
-                            //parameterTriggerIndices,
-                            parameters,
-                            ref this.parameters))
+                                sourceState.wrapMode,
+                                sourceState.motionAverageLength,
+                                state.preSourceStateTime,
+                                state.sourceStateTime,
+                                parameterTriggerIndices,
+                                parameters,
+                                ref this.parameters))
                         {
                             transition.CollectParameterTriggers(ref this.parameters, ref parameterTriggerIndices);
 
-                            averageMotionLength = stateMachine.states[transition.destinationStateIndex].motionAverageLength;
+                            averageMotionLength = stateMachine.states[transition.destinationStateIndex]
+                                .motionAverageLength;
 
-                            state.StartTransition(i, transition.destinationStateIndex, transition.offset * averageMotionLength);
+                            state.StartTransition(i, transition.destinationStateIndex,
+                                transition.offset * averageMotionLength);
 
                             break;
                         }
                     }
                 }
-
+                
                 if (state.isInTransition)
                 {
-                    ref var activeTransition = ref GetActiveTranstion(ref state, ref stateMachine);
+                    ref var activeTransition = ref GetActiveTransition(ref state, ref stateMachine);
 
                     ref var destinationState = ref stateMachine.states[activeTransition.destinationStateIndex];
 
@@ -1414,6 +1367,7 @@ namespace ZG
                     duration = GetDuration(ref activeTransition, ref sourceState, parameters);
                     if (duration > state.transitionTime)
                     {
+                        //int sourceStateIndex = state.sourceStateIndex, destinationStateIndex = state.destinationStateIndex, activeTransitionIndex = state.activeTransitionIndex;
                         sourceParameterTriggerIndexCount = parameterTriggerIndices.IsCreated ? parameterTriggerIndices.Count : 0;
                         if (EvaluateInterruptTransitions(
                             sourceState.wrapMode,
@@ -1433,6 +1387,7 @@ namespace ZG
                             //state.sourceStateTime = math.max(state.sourceStateTime - deltaTime, state.preSourceStateTime);
 
                             destinationParameterTriggerIndexCount = parameterTriggerIndices.IsCreated ? parameterTriggerIndices.Count : 0;
+                            //UnityEngine.Debug.LogError($"Break {sourceStateIndex} : {activeTransitionIndex} : {destinationStateIndex} To {state.sourceStateIndex} : {state.activeTransitionIndex} : {state.destinationStateIndex} : {sourceParameterTriggerIndexCount} : {destinationParameterTriggerIndexCount} : {parameters[4].value}");
                             if(destinationParameterTriggerIndexCount > sourceParameterTriggerIndexCount)
                                 continue;
                         }
@@ -1485,7 +1440,7 @@ namespace ZG
             outTimes.Clear();
             outWeights.Clear();
 
-            UnsafeHashSet<int> parameterTriggerIndices = default;
+            UnsafeHashSet<int> parameterTriggerIndices = default, parameterTriggerIndexResults = default;
             float transitionNormalizedTime, stateWeight;
             int numStateMotionIndices, numLayers = math.min(layers.IsCreated ? layers.Length : 0, this.layers.Length);
             for (int i = 0; i < numLayers; ++i)
@@ -1498,6 +1453,16 @@ namespace ZG
                     if (numStateMotionIndices < 1)
                         continue;
 
+                    if (parameterTriggerIndices.IsCreated)
+                    {
+                        if (!parameterTriggerIndexResults.IsCreated)
+                            parameterTriggerIndexResults = new UnsafeHashSet<int>(parameterTriggerIndices.Capacity, Allocator.Temp);
+                        
+                        parameterTriggerIndexResults.UnionWith(parameterTriggerIndices);
+                        
+                        parameterTriggerIndices.Clear();
+                    }
+
                     ref var state = ref states.ElementAt(layer.stateMachineIndex);
 
                     ref var stateMachine = ref stateMachines[layer.stateMachineIndex];
@@ -1509,7 +1474,7 @@ namespace ZG
                     transitionNormalizedTime = 0.0f;
                     if (state.isInTransition)
                     {
-                        ref var activeTransition = ref GetActiveTranstion(ref state, ref stateMachine);
+                        ref var activeTransition = ref GetActiveTransition(ref state, ref stateMachine);
 
                         transitionNormalizedTime = state.transitionTime / GetDuration(ref activeTransition, ref sourceState, parameters);
                     }
@@ -1574,6 +1539,13 @@ namespace ZG
                             ref outEvents);
                     }
                 }
+            }
+
+            if (parameterTriggerIndexResults.IsCreated)
+            {
+                parameterTriggerIndices.UnionWith(parameterTriggerIndexResults);
+
+                parameterTriggerIndexResults.Dispose();
             }
 
             if(parameterTriggerIndices.IsCreated)

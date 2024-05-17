@@ -193,16 +193,14 @@ namespace ZG
                 DynamicBuffer<MeshInstanceRig> instanceRigs;
                 if (index < this.instanceRigs.Length)
                     instanceRigs = this.instanceRigs[index];
-                else if (index < this.entityParents.Length)
+                else
                 {
-                    Entity rigEntity = EntityParent.Get(entityParents[index], instanceRigMap);
+                    Entity rigEntity = index < entityParents.Length ? EntityParent.Get(entityParents[index], instanceRigMap) : Entity.Null;
                     if (rigEntity == Entity.Null)
                         return;
 
                     instanceRigs = instanceRigMap[rigEntity];
                 }
-                else
-                    return;
 
                 instances[index].definition.Value.Apply(
                     ref entityManager,
