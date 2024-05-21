@@ -871,6 +871,9 @@ namespace ZG
 
         public void OnDestroy(ref SystemState state)
         {
+            foreach (var prefab in prefabs)
+                prefab.Value.Dispose();
+            
             prefabs.Dispose();
         }
 

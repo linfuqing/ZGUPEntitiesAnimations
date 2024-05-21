@@ -1816,9 +1816,9 @@ namespace ZG
                 ComponentType.ReadWrite<MotionClipWeight>());*/
 
             __motions = SingletonAssetContainer<UnsafeUntypedBlobAssetReference>.Retain();
-            __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.instance;
-            __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.instance;
-            __rigRemapTables = SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.instance;
+            __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.Retain();
+            __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.Retain();
+            __rigRemapTables = SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.Retain();
 
             __instanceType = state.GetComponentTypeHandle<AnimatorControllerData>(true);
             __layerType = state.GetBufferTypeHandle<MotionClipLayer>(true);
@@ -1838,6 +1838,9 @@ namespace ZG
         public void OnDestroy(ref SystemState state)
         {
             __motions.Release();
+            __clips.Release();
+            __rigDefinitions.Release();
+            __rigRemapTables.Release();
         }
 
         [BurstCompile]

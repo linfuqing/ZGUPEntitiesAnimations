@@ -8,6 +8,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using Unity.Animation;
+using AffineTransform = Unity.Animation.AffineTransform;
 
 namespace ZG
 {

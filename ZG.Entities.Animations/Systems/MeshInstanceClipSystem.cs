@@ -467,16 +467,19 @@ namespace ZG
                 });
 
             __rigPrefabs = state.World.GetOrCreateSystemUnmanaged<MeshInstanceRigFactorySystem>().prefabs;
-            __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.instance;
-            __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.instance;
-            __rigRemapTables = SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.instance;
+            __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.Retain();
+            __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.Retain();
+            __rigRemapTables = SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.Retain();
 
             //prefabs = new SharedHashMap<int, Prefab>(Allocator.Persistent);
         }
 
+        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            //prefabs.Dispose();
+            __clips.Release();
+            __rigDefinitions.Release();
+            __rigRemapTables.Release();
         }
 
         [BurstCompile]

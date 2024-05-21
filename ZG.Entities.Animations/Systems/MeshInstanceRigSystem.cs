@@ -87,8 +87,6 @@ namespace ZG
 
         public void OnCreate(ref SystemState state)
         {
-            prefabs = new SharedHashMap<int, BlobAssetReference<MeshInstanceRigPrefab>>(Allocator.Persistent);
-
             var entityManager = state.EntityManager;
 
             var rigPrefabComponentTypes = MeshInstanceRigUtility.rigPrefabComponentTypes;
@@ -141,17 +139,27 @@ namespace ZG
                     Options = EntityQueryOptions.IncludeDisabledEntities
                 });
 
-            __componentTypes = SingletonAssetContainer<ComponentTypeSet>.instance;
+            __componentTypes = SingletonAssetContainer<ComponentTypeSet>.Retain();
 
-            __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.instance;
+            __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.Retain();
 
             __results = new UnsafeListEx<MeshInstanceRigUtility.Result>(Allocator.Persistent);
+            
+            prefabs = new SharedHashMap<int, BlobAssetReference<MeshInstanceRigPrefab>>(Allocator.Persistent);
         }
 
+        //[BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
+            __componentTypes.Release();
+            
+            __rigDefinitions.Release();
+            
             __results.Dispose();
 
+            foreach (var prefab in prefabs)
+                prefab.Value.Dispose();
+            
             prefabs.Dispose();
         }
 

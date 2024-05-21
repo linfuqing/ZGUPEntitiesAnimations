@@ -181,9 +181,9 @@ namespace ZG
                         .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
                         .Build(ref state);
 
-            __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.instance;
-            __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.instance;
-            __rigRemapTables = SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.instance;
+            __clips = SingletonAssetContainer<BlobAssetReference<Clip>>.Retain();
+            __rigDefinitions = SingletonAssetContainer<BlobAssetReference<RigDefinition>>.Retain();
+            __rigRemapTables = SingletonAssetContainer<BlobAssetReference<RigRemapTable>>.Retain();
 
             __rigIDType = state.GetComponentTypeHandle<MeshInstanceRigID>(true);
 
@@ -200,6 +200,9 @@ namespace ZG
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
+            __clips.Release();
+            __rigDefinitions.Release();
+            __rigRemapTables.Release();
         }
 
         [BurstCompile]
