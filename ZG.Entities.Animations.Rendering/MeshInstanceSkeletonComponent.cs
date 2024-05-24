@@ -62,6 +62,8 @@ namespace ZG
 
 #if DEBUG
             var database = GetComponent<MeshInstanceRendererComponent>().database;
+            var rigDatabase = GetComponentInParent<MeshInstanceRigComponent>(true).database;
+            ref var rigDefinition = ref rigDatabase.definition.Value;
             ref var rendererDefinition = ref database.definition.Value;
             ref var defintion = ref instance.definition.Value;
             int numInstances = defintion.instances.Length, numRenderers, boneCount, bindposeCount, i, j;
@@ -69,6 +71,9 @@ namespace ZG
             {
                 ref var temp = ref defintion.instances[i];
                 ref var skeleton = ref defintion.skeletons[temp.skeletionIndex];
+                if (skeleton.rootBoneIndex != -1 && skeleton.rootBoneIndex >= rigDefinition.nodes.Length)
+                    Debug.LogError("Root Bone Index Out Range Of Skeleton!", this);
+                
                 boneCount = skeleton.bones.Length + skeleton.indirectBones.Length;
 
                 numRenderers = temp.rendererIndices.Length;
