@@ -19,7 +19,7 @@ namespace ZG
                 public string transformPath;
 
                 [Mask]
-                public HybridRigNodeTransformTyoe transformTyoe;
+                public HybridRigNodeTransformType transformTyoe;
             }
 
             [Serializable]

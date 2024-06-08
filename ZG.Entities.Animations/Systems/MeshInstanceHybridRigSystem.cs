@@ -12,7 +12,7 @@ namespace ZG
     {
         public struct Node
         {
-            public HybridRigNodeTransformTyoe transformType;
+            public HybridRigNodeTransformType transformType;
 
             public StringHash boneID;
             public BlobString transformPath;

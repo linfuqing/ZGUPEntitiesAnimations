@@ -11,7 +11,7 @@ using UnityEngine;
 namespace ZG
 {
     [System.Flags]
-    public enum HybridRigNodeTransformTyoe
+    public enum HybridRigNodeTransformType
     {
         Scale = 0x01,
         Rotation = 0x02,
@@ -20,7 +20,7 @@ namespace ZG
 
     public struct HybridRigNode : IComponentData
     {
-        public HybridRigNodeTransformTyoe transformType;
+        public HybridRigNodeTransformType transformType;
 
         public int boneIndex;
 

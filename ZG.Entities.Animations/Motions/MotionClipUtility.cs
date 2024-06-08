@@ -670,56 +670,65 @@ namespace ZG
             int depth,
             ref MotionClipStreamStack<AnimatedData> streamStack,
             ref MotionClipStreamStack<MotionClipMixer> mixerStack,
-            ref MotionClipStream<MotionClipMixer> mixer,
+            ref MotionClipStream<MotionClipMixer> parentStream,
+            //ref MotionClipMixer child, 
             ref MotionClipStream<AnimatedData> stream,
             ref AnimationStream outputStream,
             ref AnimationStream defaultPoseInputStream)
         {
-            bool result = false;
-            AnimationStream rigStream;
-            MotionClipStream<MotionClipMixer> child;
-            while (mixer.isCreated)
+            //bool result = false;
+            MotionClipStream<MotionClipMixer> /*parentStream = child.parent, */childStream;
+            while (parentStream.isCreated)
             {
-                ref var temp = ref mixer.Peek();
-                if (temp.depth < depth)
-                    break;
-
-                rigStream = outputStream;
-
-                outputStream = temp.outputStream;
-
-                if (temp.weight > math.FLT_MIN_NORMAL && !rigStream.IsNull)
+                ref var parent = ref parentStream.Peek();
+                if (parent.depth < depth)
                 {
-                    if (temp.state == null)
-                        temp.state = Core.MixerBegin(ref outputStream);
-
-                    temp.state = Core.MixerAdd(ref outputStream, ref rigStream, temp.weight - temp.state.Value.WeightSum, temp.state.Value);
+                    //break;
+                    //child.depth = math.min(child.depth, depth);
+                    
+                    return false;
                 }
 
-                if (temp.depth == depth)
+                if (parent.weight > math.FLT_MIN_NORMAL && !outputStream.IsNull)
+                {
+                    if (parent.state == null)
+                        parent.state = Core.MixerBegin(ref parent.outputStream);
+
+                    parent.state = Core.MixerAdd(
+                        ref parent.outputStream,
+                        ref outputStream,
+                        parent.weight - parent.state.Value.WeightSum,
+                        parent.state.Value);
+                    
+                    outputStream = AnimationStream.Null;
+                }
+                
+                if (parent.depth == depth)
                     break;
 
-                result = true;
+                //result = true;
 
-                if (temp.state != null)
-                    Core.MixerEnd(ref outputStream, ref defaultPoseInputStream, temp.state.Value);
+                if (parent.state != null)
+                    Core.MixerEnd(ref parent.outputStream, ref defaultPoseInputStream, parent.state.Value);
+
+                outputStream = parent.outputStream;
 
                 if (stream.isCreated)
                     stream.Release(ref streamStack);
 
-                stream = temp.stream;
+                stream = parent.stream;
 
-                child = mixer;
+                childStream = parentStream;
 
-                mixer = temp.parent;
+                parentStream = parent.parent;
 
-                child.Release(ref mixerStack);
+                childStream.Release(ref mixerStack);
             }
 
-            if (stream.isCreated)
-                stream.Release(ref streamStack);
+            /*if (child.stream.isCreated)
+                child.stream.Release(ref streamStack);*/
 
-            return result;
+            return true;//result;
         }
 
         private static void __ResetMixerStack(
@@ -734,7 +743,26 @@ namespace ZG
 
             if (mixer.depth < depth)
             {
-                if (!mixer.outputStream.IsNull)
+                bool isPeek = !mixer.outputStream.IsNull;
+                if (!isPeek)
+                {
+                    isPeek = mixer.weight < 1.0f;
+                    if (isPeek && mixer.weight > math.FLT_MIN_NORMAL)
+                    {
+                        var rigDefinition = defaultPoseInputStream.Rig;
+                        int streamSize = rigDefinition.Value.Bindings.StreamSize;
+
+                        if (mixer.stream.isCreated && mixer.stream.Length != streamSize)
+                            mixer.stream.Release(ref streamStack);
+
+                        if (!mixer.stream.isCreated)
+                            mixer.stream = new MotionClipStream<AnimatedData>(streamSize, ref streamStack);
+
+                        mixer.outputStream = AnimationStream.Create(rigDefinition, mixer.stream);
+                    }
+                }
+                
+                if (isPeek)
                 {
                     var parent = new MotionClipStream<MotionClipMixer>(1, ref mixerStack);
                     parent.Peek() = mixer;
@@ -755,34 +783,43 @@ namespace ZG
                 Core.MixerEnd(ref mixer.outputStream, ref defaultPoseInputStream, mixer.state.Value);
 
             var stream = mixer.parent;
-            __ClearMixerStack(
-                depth,
-                ref streamStack,
-                ref mixerStack,
-                ref stream,
-                ref mixer.stream,
-                ref mixer.outputStream,
-                ref defaultPoseInputStream);
-
-            mixer.parent = MotionClipStream<MotionClipMixer>.Null;
-            if (stream.isCreated)
+            if (__ClearMixerStack(
+                    depth,
+                    ref streamStack,
+                    ref mixerStack,
+                    //ref mixer,
+                    ref stream,
+                    ref mixer.stream,
+                    ref mixer.outputStream,
+                    ref defaultPoseInputStream))
             {
-                mixer = stream.Peek();
-                if (mixer.depth == depth)
-                {
-                    stream.Release(ref mixerStack);
+                if (mixer.stream.isCreated)
+                    mixer.stream.Release(ref streamStack);
 
-                    return;
+                //var stream = mixer.parent;
+                mixer.parent = MotionClipStream<MotionClipMixer>.Null;
+                if (stream.isCreated)
+                {
+                    mixer = stream.Peek();
+                    if (mixer.depth == depth)
+                    {
+                        stream.Release(ref mixerStack);
+
+                        return;
+                    }
+
+                    mixer.parent = stream;
                 }
 
-                mixer.parent = stream;
+                mixer.weight = 0.0f;
+                mixer.state = null;
+                mixer.stream = MotionClipStream<AnimatedData>.Null;
+                mixer.outputStream = AnimationStream.Null;
             }
-
+            else
+                mixer.state = null;
+            
             mixer.depth = depth;
-            mixer.weight = 0.0f;
-            mixer.state = null;
-            mixer.outputStream = AnimationStream.Null;
-            mixer.stream = MotionClipStream<AnimatedData>.Null;
         }
     }
 }
