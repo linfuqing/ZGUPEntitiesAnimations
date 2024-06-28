@@ -312,7 +312,11 @@ namespace ZG
                 }
             }
 
-            public void Create(bool isRoot, Transform rendererRoot, in MeshInstanceRigDatabase.Data rig/*, out Type[] types*/)
+            public void Create(
+                bool isRoot, 
+                Transform rendererRoot, 
+                in MeshInstanceRendererDatabase.Data renderer, 
+                in MeshInstanceRigDatabase.Data rig/*, out Type[] types*/)
             {
                 var renderers = rendererRoot.GetComponentsInChildren<Renderer>();
 
@@ -326,19 +330,21 @@ namespace ZG
 
                 types = typeResults.ToArray();*/
 
-                var rendererLODCounts = new Dictionary<Renderer, int>();
+                /*var rendererLODCounts = new Dictionary<Renderer, int>();
 
                 var lodGroups = rendererRoot.GetComponentsInChildren<LODGroup>();
                 if (lodGroups != null)
-                    MeshInstanceRendererDatabase.Build(lodGroups, rendererLODCounts);
+                    MeshInstanceRendererDatabase.Build(lodGroups, rendererLODCounts);*/
 
                 Create(
                     isRoot,
                     root,
                     renderers,
-                    rig.rigs,
+                    renderer.nodeMap, 
+                    renderer.nodes, 
                     rig.nodes,
-                    rendererLODCounts,
+                    rig.rigs,
+                    //rendererLODCounts,
                     rigIndices);
             }
 
@@ -346,9 +352,11 @@ namespace ZG
                 bool isRoot,
                 Transform root,
                 Renderer[] renderers,
+                MeshInstanceRendererDatabase.NodeMap nodeMap,
+                MeshInstanceRendererDatabase.Node[] rendererNodes,
+                MeshInstanceRigDatabase.Node[] rigNodes,
                 MeshInstanceRigDatabase.Rig[] rigs,
-                MeshInstanceRigDatabase.Node[] nodes,
-                IDictionary<Renderer, int> rendererLODCounts,
+                //IDictionary<Renderer, int> rendererLODCounts,
                 IDictionary<Component, int> rigIndices)
             {
                 int numRenderers = renderers == null ? 0 : renderers.Length;
@@ -360,7 +368,7 @@ namespace ZG
 #endif
 
                 bool isSkinedMesh;
-                int rendererIndex = 0, rendererCount, rendererLODCount, materialCount, numMaterials, skeletonIndex, i;
+                int rendererIndex, numLODs, numMaterials, skeletonIndex, i, j;
                 Skeleton skeleton;
                 Instance instance;
                 Mesh mesh;
@@ -370,7 +378,11 @@ namespace ZG
                 Component rigRoot;
                 Transform transform;
                 GameObject target;
+                MeshInstanceRendererDatabase.NodeMap.Key key;
+                MeshInstanceRendererDatabase.NodeMap.Value value;
+                MeshInstanceRendererDatabase.LOD[] lods;
                 Material[] materials;
+                List<int> rendererIndices = null;
                 List<Instance> instances = null;
                 List<Skeleton> skeletons = null;
                 Dictionary<Mesh, int> skeletonIndices = null;
@@ -399,7 +411,7 @@ namespace ZG
                         isSkinedMesh = false;
                     }
 
-                    if (mesh == null)
+                    if (!isSkinedMesh || mesh == null)
                         continue;
 
                     transform = renderer.transform;
@@ -408,96 +420,107 @@ namespace ZG
 
 #if UNITY_EDITOR
                     if (isShowProgressBar)
-                        EditorUtility.DisplayProgressBar("Building Renderers..", renderer.name, (index++ * 1.0f) / numRenderers);
+                        EditorUtility.DisplayProgressBar("Building Renderers..", renderer.name,
+                            (index++ * 1.0f) / numRenderers);
 #endif
+
+                    key.renderer = renderer;
 
                     materials = renderer.sharedMaterials;
                     numMaterials = materials == null ? 0 : materials.Length;
-                    if (numMaterials > 0)
+                    if (numMaterials < 1)
+                        continue;
+
+                    if (skeletonIndices == null)
+                        skeletonIndices = new Dictionary<Mesh, int>();
+
+                    if (skeletonIndices.TryGetValue(mesh, out skeletonIndex))
                     {
-                        materialCount = 0;
-                        for (i = 0; i < numMaterials; ++i)
+                        rigRoot = __GetRigRoot(renderer.gameObject, out _ /*, null*/);
+                        if (rigRoot == null || !rigIndices.TryGetValue(rigRoot.transform, out instance.rigIndex))
                         {
-                            if (materials[i] == null)
-                                UnityEngine.Debug.LogError(renderer.name + " Lost Material Index: " + i);
-                            else
-                                ++materialCount;
+                            UnityEngine.Debug.LogError("Create Skeleton Fail.", renderer);
+
+                            break;
                         }
 
-                        if (!rendererLODCounts.TryGetValue(renderer, out rendererLODCount))
-                            rendererLODCount = 1;
-
-                        rendererCount = materialCount * rendererLODCount;
-
-                        if (isSkinedMesh)
-                        {
-                            if (skeletonIndices == null)
-                                skeletonIndices = new Dictionary<Mesh, int>();
-
-                            if (skeletonIndices.TryGetValue(mesh, out skeletonIndex))
-                            {
-                                rigRoot = __GetRigRoot(renderer.gameObject, out _/*, null*/);
-                                if (rigRoot == null || !rigIndices.TryGetValue(rigRoot.transform, out instance.rigIndex))
-                                {
-                                    UnityEngine.Debug.LogError("Create Skeleton Fail.", renderer);
-
-                                    break;
-                                }
-
-                                skeleton = skeletons[skeletonIndex];
-                            }
-                            else
-                            {
-                                instance.rigIndex = __CreateSkeleton(
-                                    root,
-                                    skinnedMeshRenderer,
-                                    rigs,
-                                    nodes,
-                                    rigIndices,
-                                    out rigRoot,
-                                    out skeleton);
-                                if (instance.rigIndex == -1)
-                                {
-                                    UnityEngine.Debug.LogError("Create Skeleton Fail.", renderer);
-
-                                    break;
-                                }
-
-                                if (skeletons == null)
-                                    skeletons = new List<Skeleton>();
-
-                                skeletonIndex = skeletons.Count;
-
-                                skeletons.Add(skeleton);
-                                skeletonIndices[mesh] = skeletonIndex;
-
-                                var rootBone = skinnedMeshRenderer.rootBone;
-                                if (rootBone != null)
-                                    rigRoot = rootBone;
-                            }
-
-                            instance.skeletionIndex = skeletonIndex;
-
-                            instance.localToRoot = isRoot ? Matrix4x4.identity : Matrix4x4.Inverse(rigRoot.transform.localToWorldMatrix) * renderer.transform.parent.localToWorldMatrix;
-                            /*instance.localToRoot = Matrix4x4.Inverse(instance.localToRoot) * 
-                                MeshInstanceRigDatabase.SkeletonNode.GetRootDefaultMatrix(
-                                    rigs[instance.rigIndex].skeletonNodes, 
-                                    skeleton.rootBoneIndex == -1 ? 0 : skeleton.rootBoneIndex);*/
-
-                            instance.rendererIndices = new int[rendererCount];
-                            for (i = 0; i < rendererCount; ++i)
-                                instance.rendererIndices[i] = rendererIndex++;
-
-                            instance.name = renderer.name;
-
-                            if (instances == null)
-                                instances = new List<Instance>();
-
-                            instances.Add(instance);
-                        }
-                        else
-                            rendererIndex += rendererCount;
+                        skeleton = skeletons[skeletonIndex];
                     }
+                    else
+                    {
+                        instance.rigIndex = __CreateSkeleton(
+                            root,
+                            skinnedMeshRenderer,
+                            rigs,
+                            rigNodes,
+                            rigIndices,
+                            out rigRoot,
+                            out skeleton);
+                        if (instance.rigIndex == -1)
+                        {
+                            UnityEngine.Debug.LogError("Create Skeleton Fail.", renderer);
+
+                            break;
+                        }
+
+                        if (skeletons == null)
+                            skeletons = new List<Skeleton>();
+
+                        skeletonIndex = skeletons.Count;
+
+                        skeletons.Add(skeleton);
+                        skeletonIndices[mesh] = skeletonIndex;
+
+                        var rootBone = skinnedMeshRenderer.rootBone;
+                        if (rootBone != null)
+                            rigRoot = rootBone;
+                    }
+
+                    instance.skeletionIndex = skeletonIndex;
+
+                    instance.localToRoot =
+                        isRoot
+                            ? Matrix4x4.identity
+                            : Matrix4x4.Inverse(rigRoot.transform.localToWorldMatrix) *
+                              renderer.transform.parent.localToWorldMatrix;
+                    /*instance.localToRoot = Matrix4x4.Inverse(instance.localToRoot) *
+                        MeshInstanceRigDatabase.SkeletonNode.GetRootDefaultMatrix(
+                            rigs[instance.rigIndex].skeletonNodes,
+                            skeleton.rootBoneIndex == -1 ? 0 : skeleton.rootBoneIndex);*/
+
+                    if (rendererIndices == null)
+                        rendererIndices = new List<int>();
+                    else
+                        rendererIndices.Clear();
+
+                    for (i = 0; i < numMaterials; ++i)
+                    {
+                        key.material = materials[i];
+                        if (key.material == null)
+                            UnityEngine.Debug.LogError(renderer.name + " Lost Material Index: " + i);
+                        else if (nodeMap.TryGetValue(key, out value) && value.nodeIndices != null)
+                        {
+                            foreach (var nodeIndex in value.nodeIndices)
+                            {
+                                rendererIndex =
+                                    MeshInstanceRendererDatabase.EntityStartIndexOf(nodeIndex, rendererNodes);
+                                lods = rendererNodes[nodeIndex].lods;
+
+                                numLODs = Mathf.Max(1, lods == null ? 0 : lods.Length);
+                                for (j = 0; j < numLODs; ++j)
+                                    rendererIndices.Add(rendererIndex++);
+                            }
+                        }
+                    }
+
+                    instance.rendererIndices = rendererIndices.ToArray();
+
+                    instance.name = renderer.name;
+
+                    if (instances == null)
+                        instances = new List<Instance>();
+
+                    instances.Add(instance);
                 }
 
                 this.instances = instances.ToArray();
@@ -1016,6 +1039,8 @@ namespace ZG
         [HideInInspector]
         public Transform rendererRoot;
 
+        public MeshInstanceRendererDatabase rendererDatabase;
+
         [UnityEngine.Serialization.FormerlySerializedAs("rig")]
         public MeshInstanceRigDatabase rigDatabase;
 
@@ -1023,7 +1048,11 @@ namespace ZG
 
         public void Create(Transform root)
         {
-            data.Create(isRoot, root, rigDatabase.data/*, out var types*/);
+            data.Create(
+                isRoot, 
+                root, 
+                rendererDatabase.data, 
+                rigDatabase.data/*, out var types*/);
 
             //rigDatabase.types = types;
         }

@@ -66,7 +66,7 @@ namespace ZG
             ref var rigDefinition = ref rigDatabase.definition.Value;
             ref var rendererDefinition = ref database.definition.Value;
             ref var defintion = ref instance.definition.Value;
-            int numInstances = defintion.instances.Length, numRenderers, boneCount, bindposeCount, i, j;
+            int numInstances = defintion.instances.Length, numRenderers, boneCount, bindposeCount, rendererDefintionIndex, i, j;
             for (i = 0; i < numInstances; ++i)
             {
                 ref var temp = ref defintion.instances[i];
@@ -79,7 +79,8 @@ namespace ZG
                 numRenderers = temp.rendererIndices.Length;
                 for (j = 0; j < numRenderers; ++j)
                 {
-                    bindposeCount = database.meshes[rendererDefinition.renderers[rendererDefinition.nodes[temp.rendererIndices[j]].rendererIndex].meshIndex].bindposeCount;
+                    rendererDefintionIndex = MeshInstanceRendererUtility.DefinitionIndexOf(ref rendererDefinition.nodes, temp.rendererIndices[j]);
+                    bindposeCount = database.meshes[rendererDefinition.renderers[rendererDefinition.nodes[rendererDefintionIndex].rendererIndex].meshIndex].bindposeCount;
 
                     if(bindposeCount != boneCount)
                         Debug.LogError("Bone Index Out Range Of Skeleton!", this);

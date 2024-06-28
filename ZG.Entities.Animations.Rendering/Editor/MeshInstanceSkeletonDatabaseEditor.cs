@@ -37,6 +37,15 @@ namespace ZG
 
                     if (renderer.root == skeleton.rendererRoot)
                     {
+                        if (skeleton.rendererDatabase == null)
+                        {
+                            skeleton.rendererDatabase = renderer;
+                            
+                            renderer.EditorMaskDirty();
+                            
+                            skeleton.EditorMaskDirty();
+                        }
+
                         isFind = true;
 
                         break;
@@ -148,12 +157,6 @@ namespace ZG
             if(GUILayout.Button("Bake"))
             {
                 target.data.Bake(target.rendererRoot);
-            }
-
-            if (GUILayout.Button("Test"))
-            {
-                var matrix = MeshInstanceRigDatabase.SkeletonNode.GetRootDefaultMatrix(target.rigDatabase.data.rigs[0].skeletonNodes, 47);
-                Debug.Log(matrix);
             }
 
             base.OnInspectorGUI();
