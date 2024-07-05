@@ -424,7 +424,7 @@ namespace ZG
                             (index++ * 1.0f) / numRenderers);
 #endif
 
-                    key.renderer = renderer;
+                    key.rendererPath = renderer.transform.GetPath(root);
 
                     materials = renderer.sharedMaterials;
                     numMaterials = materials == null ? 0 : materials.Length;
