@@ -39,9 +39,9 @@ namespace ZG
     }
 
     [UpdateInGroup(typeof(MeshInstanceSystemGroup)), UpdateAfter(typeof(MeshInstanceRigSystem))]
-    public partial class MeshInstanceHybridRigSystem : SystemBase
+    public partial struct MeshInstanceHybridRigSystem : ISystem
     {
-        public struct Result
+        private struct Result
         {
             public int nodeOffset;
             public int nodeCount;
@@ -114,7 +114,7 @@ namespace ZG
             public NativeArray<MeshInstanceHybridRigData> instances;
 
             [ReadOnly]
-            public NativeArray<EntityObject<Transform>> trasnforms;
+            public NativeArray<EntityObject<Transform>> transforms;
 
             public NativeArray<int> counter;
 
@@ -124,7 +124,7 @@ namespace ZG
 
                 Result result;
                 result.entity = entityArray[index];
-                result.root = trasnforms[index];
+                result.root = transforms[index];
                 result.transformPathPrefix = instance.transformPathPrefix;
                 result.definition = instance.definition;
                 ref var definition = ref result.definition.Value;
@@ -156,7 +156,7 @@ namespace ZG
             public ComponentTypeHandle<MeshInstanceHybridRigData> instanceType;
 
             [ReadOnly]
-            public ComponentTypeHandle<EntityObject<Transform>> trasnformType;
+            public ComponentTypeHandle<EntityObject<Transform>> transformType;
 
             [ReadOnly, DeallocateOnJobCompletion]
             public NativeArray<int> baseEntityIndexArray;
@@ -169,7 +169,7 @@ namespace ZG
             {
                 CollectToCreate collectToCreate;
                 collectToCreate.entityArray = chunk.GetNativeArray(entityType);
-                collectToCreate.trasnforms = chunk.GetNativeArray(ref trasnformType);
+                collectToCreate.transforms = chunk.GetNativeArray(ref transformType);
                 collectToCreate.instances = chunk.GetNativeArray(ref instanceType);
                 collectToCreate.counter = counter;
 
@@ -248,79 +248,142 @@ namespace ZG
             }
         }
 
-        public readonly int InnerloopBatchCount = 1;
+        private struct CollectTransforms : IFunctionWrapper
+        {
+            public NativeArray<Result> results;
+            public NativeArray<EntityObject<Transform>> transforms;
+            
+            public void Invoke()
+            {
+                Transform root, temp;
+                EntityObject<Transform> transform;
+                Result result;
+                string transformPath;
+                int numResults = results.Length, numRigs, numNodes, nodeIndex, i, j, k;
+                for(i = 0; i < numResults; ++i)
+                {
+                    result = results[i];
+                    ref var definition = ref result.definition.Value;
+
+                    nodeIndex = result.nodeOffset;
+
+                    numRigs = definition.rigs.Length;
+                    for (j = 0; j < numRigs; ++j)
+                    {
+                        ref var rig = ref result.definition.Value.rigs[j];
+
+                        root = result.root.value;
+
+                        numNodes = rig.nodes.Length;
+                        for (k = 0; k < numNodes; ++k)
+                        {
+                            ref var node = ref rig.nodes[k];
+
+                            transformPath = result.transformPathPrefix + node.transformPath.ToString();
+                            temp = root.Find(transformPath);
+
+                            if (temp == null)
+                            {
+                                UnityEngine.Debug.LogError($"{root.root} transform Path: {transformPath} can not been found.", root.root);
+
+                                transform = EntityObject<Transform>.Null;
+                            }
+                            else
+                            {
+                                transform = new EntityObject<Transform>(temp);
+
+                                //transform.Retain();
+                            }
+
+                            transforms[nodeIndex++] = transform;
+                        }
+                    }
+                }
+            }
+        }
+
+        public static readonly int InnerloopBatchCount = 1;
 
         private EntityArchetype __entityArchetype;
         private EntityQuery __groupToDestroy;
         private EntityQuery __groupToCreate;
+        
+        private EntityTypeHandle __entityType;
+        private ComponentTypeHandle<EntityObject<Transform>> __transformType;
+        private ComponentTypeHandle<MeshInstanceHybridRigData> __instanceType;
+        private BufferTypeHandle<MeshInstanceHybridRigNode> __nodeType;
 
-        protected override void OnCreate()
+        private BufferLookup<MeshInstanceHybridRigNode> __nodes;
+
+        private BufferLookup<MeshInstanceRig> __instanceRigs;
+
+        private ComponentLookup<Rig> __rigs;
+        private ComponentLookup<HybridRigNode> __instances;
+
+        private ComponentLookup<EntityObject<Transform>> __transforms;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
         {
-            base.OnCreate();
+            using(var componentTypes = new NativeList<ComponentType>(Allocator.Temp)
+                  {
+                      TransformAccessArrayEx.componentType, 
+                      ComponentType.ReadOnly<EntityObjects>(), 
+                      ComponentType.ReadOnly<HybridRigNode>()
+                  })
+                __entityArchetype = state.EntityManager.CreateArchetype(componentTypes.AsArray());
 
-            var componentType = TransformAccessArrayEx.componentType;
-            __entityArchetype = EntityManager.CreateArchetype(componentType, ComponentType.ReadOnly<EntityObjects>(), ComponentType.ReadOnly<HybridRigNode>());
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __groupToDestroy = builder
+                    .WithAll<MeshInstanceHybridRigNode>()
+                    .WithNone<MeshInstanceHybridRigData>()
+                    .AddAdditionalQuery()
+                    .WithAll<MeshInstanceHybridRigNode, MeshInstanceHybridRigData>()
+                    .WithNone<MeshInstanceRig>()
+                    .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                    .Build(ref state);
+            
+            using (var builder = new EntityQueryBuilder(Allocator.Temp))
+                __groupToCreate = builder
+                    .WithAll<EntityObject<Transform>, MeshInstanceHybridRigData, MeshInstanceRig>()
+                    .WithNone<MeshInstanceHybridRigNode>()
+                    .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
+                    .Build(ref state);
 
-            __groupToDestroy = GetEntityQuery(
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceHybridRigNode>()
-                    },
-
-                    None = new ComponentType[]
-                    {
-                        typeof(MeshInstanceHybridRigData)
-                    }
-                },
-                new EntityQueryDesc()
-                {
-                    All = new ComponentType[]
-                    {
-                        ComponentType.ReadOnly<MeshInstanceHybridRigNode>(),
-                        ComponentType.ReadOnly<MeshInstanceHybridRigData>(),
-                    },
-
-                    None = new ComponentType[]
-                    {
-                        typeof(MeshInstanceRig)
-                    },
-
-                    Options = EntityQueryOptions.IncludeDisabledEntities
-                });
-
-            __groupToCreate = GetEntityQuery(new EntityQueryDesc()
-            {
-                All = new ComponentType[]
-                {
-                    componentType,
-                    ComponentType.ReadOnly<MeshInstanceHybridRigData>(), 
-                    ComponentType.ReadOnly<MeshInstanceRig>()
-                },
-                None = new ComponentType[]
-                {
-                    typeof(MeshInstanceHybridRigNode)
-                },
-                Options = EntityQueryOptions.IncludeDisabledEntities
-            });
+            __entityType = state.GetEntityTypeHandle();
+            __transformType = state.GetComponentTypeHandle<EntityObject<Transform>>(true);
+            __instanceType = state.GetComponentTypeHandle<MeshInstanceHybridRigData>(true);
+            __nodeType = state.GetBufferTypeHandle<MeshInstanceHybridRigNode>(true);
+            
+            __nodes = state.GetBufferLookup<MeshInstanceHybridRigNode>();
+            __instanceRigs = state.GetBufferLookup<MeshInstanceRig>(true);
+            __rigs = state.GetComponentLookup<Rig>(true);
+            __instances = state.GetComponentLookup<HybridRigNode>();
+            __transforms = state.GetComponentLookup<EntityObject<Transform>>();
         }
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
         {
-            CompleteDependency();
+            
+        }
 
-            var entityManager = EntityManager;
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            state.CompleteDependency();
+
+            var entityManager = state.EntityManager;
             if (!__groupToDestroy.IsEmptyIgnoreFilter)
             {
                 using (var entities = new NativeList<Entity>(Allocator.TempJob))
                 {
                     CollectToDestroyEx collect;
-                    collect.nodeType = GetBufferTypeHandle<MeshInstanceHybridRigNode>(true);
+                    collect.nodeType = __nodeType.UpdateAsRef(ref state);
                     //collect.transforms = GetComponentLookup<EntityObject<Transform>>(true);
                     collect.entities = entities;
 
-                    collect.Run(__groupToDestroy);
+                    collect.RunByRef(__groupToDestroy);
 
                     entityManager.RemoveComponent<MeshInstanceHybridRigNode>(__groupToDestroy);
 
@@ -337,13 +400,13 @@ namespace ZG
                     using (var counter = new NativeArray<int>(1, Allocator.TempJob))
                     {
                         CollectToCreateEx collect;
-                        collect.entityType = GetEntityTypeHandle();
-                        collect.trasnformType = GetComponentTypeHandle<EntityObject<Transform>>(true);
-                        collect.instanceType = GetComponentTypeHandle<MeshInstanceHybridRigData>(true);
+                        collect.entityType = __entityType.UpdateAsRef(ref state);
+                        collect.transformType = __transformType.UpdateAsRef( ref state);
+                        collect.instanceType = __instanceType.UpdateAsRef(ref state);
                         collect.baseEntityIndexArray = __groupToCreate.CalculateBaseEntityIndexArray(Allocator.TempJob);
                         collect.counter = counter;
                         collect.results = results;
-                        collect.Run(__groupToCreate);
+                        collect.RunByRef(__groupToCreate);
 
                         count = counter[0];
                     }
@@ -353,62 +416,22 @@ namespace ZG
                     var entityArray = entityManager.CreateEntity(__entityArchetype, count, Allocator.TempJob);
                     var transforms = new NativeArray<EntityObject<Transform>>(count, Allocator.TempJob, NativeArrayOptions.ClearMemory);
 
-                    Transform root, temp;
-                    EntityObject<Transform> transform;
-                    Result result;
-                    string transformPath;
-                    int numRigs, numNodes, nodeIndex, i, j, k;
-                    for(i = 0; i < entityCount; ++i)
-                    {
-                        result = results[i];
-                        ref var definition = ref result.definition.Value;
-
-                        nodeIndex = result.nodeOffset;
-
-                        numRigs = definition.rigs.Length;
-                        for (j = 0; j < numRigs; ++j)
-                        {
-                            ref var rig = ref result.definition.Value.rigs[j];
-
-                            root = result.root.value;
-
-                            numNodes = rig.nodes.Length;
-                            for (k = 0; k < numNodes; ++k)
-                            {
-                                ref var node = ref rig.nodes[k];
-
-                                transformPath = result.transformPathPrefix + node.transformPath.ToString();
-                                temp = root.Find(transformPath);
-
-                                if (temp == null)
-                                {
-                                    UnityEngine.Debug.LogError($"{root.root} transform Path: {transformPath} can not been found.", root.root);
-
-                                    transform = EntityObject<Transform>.Null;
-                                }
-                                else
-                                {
-                                    transform = new EntityObject<Transform>(temp);
-
-                                    //transform.Retain();
-                                }
-
-                                transforms[nodeIndex++] = transform;
-                            }
-                        }
-                    }
+                    CollectTransforms collectTransforms;
+                    collectTransforms.results = results;
+                    collectTransforms.transforms = transforms;
+                    collectTransforms.Run();
 
                     Init init;
                     init.entityArray = entityArray;
                     init.transforms = transforms;
                     init.results = results;
-                    init.rigMap = GetComponentLookup<Rig>(true);
-                    init.rigs = GetBufferLookup<MeshInstanceRig>(true);
-                    init.nodes = GetBufferLookup<MeshInstanceHybridRigNode>();
-                    init.transformMap = GetComponentLookup<EntityObject<Transform>>();
-                    init.instances = GetComponentLookup<HybridRigNode>();
+                    init.rigMap = __rigs.UpdateAsRef(ref state);
+                    init.rigs = __instanceRigs.UpdateAsRef(ref state);
+                    init.nodes = __nodes.UpdateAsRef(ref state);
+                    init.transformMap = __transforms.UpdateAsRef(ref state);
+                    init.instances = __instances.UpdateAsRef(ref state);
 
-                    Dependency = init.Schedule(results.Length, InnerloopBatchCount, Dependency);
+                    state.Dependency = init.ScheduleByRef(results.Length, InnerloopBatchCount, state.Dependency);
                 }
             }
         }

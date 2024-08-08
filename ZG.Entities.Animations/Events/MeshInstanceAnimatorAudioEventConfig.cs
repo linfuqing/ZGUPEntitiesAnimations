@@ -6,7 +6,7 @@ namespace ZG
     {
         public void Dispatch(Transform root, float weight, int state)
         {
-            var audioComponent = root.GetComponentInChildren<AudioComponent>();
+            var audioComponent = root.GetComponentInChildren<AudioComponent>(true);
             if (audioComponent == null)
                 return;
 
