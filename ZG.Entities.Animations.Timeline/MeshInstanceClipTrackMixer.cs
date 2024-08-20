@@ -83,18 +83,25 @@ namespace ZG
 
             if (__tracks.Count > 0)
             {
+                ulong destinationFrameID = info.frameId;
+                
                 if (__frameIDs == null)
                     __frameIDs = new Dictionary<object, ulong>();
 
-                if (!__frameIDs.TryGetValue(__player, out ulong sourceFrameID))
-                    sourceFrameID = 0;
+                if (__frameIDs.TryGetValue(__player, out ulong sourceFrameID))
+                {
+                    if (destinationFrameID == sourceFrameID)
+                        __player.AppendBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
+                    else
+                    {
+                        __player.SetBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
 
-                ulong destinationFrameID = info.frameId;
-                if (destinationFrameID == sourceFrameID || sourceFrameID == 0)
-                    __player.AppendBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
+                        __frameIDs[__player] = destinationFrameID;
+                    }
+                }
                 else
                 {
-                    __player.SetBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
+                    __player.AppendBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
 
                     __frameIDs[__player] = destinationFrameID;
                 }
