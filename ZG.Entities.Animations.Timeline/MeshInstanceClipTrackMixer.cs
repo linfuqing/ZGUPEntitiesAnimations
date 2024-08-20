@@ -5,6 +5,7 @@ using Unity.Mathematics;
 using Unity.Entities;
 using UnityEngine.Playables;
 using Unity.Transforms;
+using UnityEngine;
 
 namespace ZG
 {
@@ -15,7 +16,7 @@ namespace ZG
 
         private GameObjectEntity __player;
 
-        internal UnityEngine.Transform _parent;
+        internal Transform _parent;
 
         ~MeshInstanceClipTrackMixer()
         {
@@ -25,17 +26,17 @@ namespace ZG
         public void Dispose()
         {
             object playerObject = __player;
-            if (playerObject != null)
-                __frameIDs.Remove(playerObject);
+            bool isPlaying = playerObject != null && __frameIDs.Remove(playerObject);
 
             if (__player != null)
             {
-                __player.RemoveComponent<MeshInstanceClipTrack>();
+                if(isPlaying)
+                    __player.RemoveComponent<MeshInstanceClipTrack>();
 
                 __player = null;
             }
         }
-
+        
         public override void OnPlayableDestroy(Playable playable)
         {
             Dispose();
@@ -48,14 +49,7 @@ namespace ZG
             var player = playerData as GameObjectEntity;
             if (player != __player)
             {
-                if(__player != null)
-                    __player.RemoveComponent<MeshInstanceClipTrack>();
-
-                if (player != null)
-                {
-                    //player.Awake();
-                    player.AddBuffer<MeshInstanceClipTrack>();
-                }
+                Dispose();
 
                 __player = player;
             }
@@ -72,40 +66,48 @@ namespace ZG
             else
                 __tracks.Clear();
 
+            float weight;
             Playable input;
             float4x4 localToWorld = _parent == null ? float4x4.identity : _parent.localToWorldMatrix;
             for (int i = 0; i < numInputs; ++i)
             {
-                input = playable.GetInput(i);
-                var clip = ((ScriptPlayable<MeshInstanceClipPlayable>)input).GetBehaviour();
-                if (clip != null/* && playable.GetPlayState() == PlayState.Playing*/)
-                    __tracks.Add(clip.GetTrack(input, localToWorld, playable.GetInputWeight(i)));
+                weight = playable.GetInputWeight(i);
+                if (weight > Mathf.Epsilon)
+                {
+                    input = playable.GetInput(i);
+                    var clip = ((ScriptPlayable<MeshInstanceClipPlayable>)input).GetBehaviour();
+                    if (clip != null /* && playable.GetPlayState() == PlayState.Playing*/)
+                        __tracks.Add(clip.GetTrack(input, localToWorld, weight));
+                }
             }
 
-            /*Translation translation;
-            translation.Value = matrix.c3.xyz;
-            __player.SetComponentData(translation);
-
-            Rotation rotation;
-            rotation.Value = matrix.c3.xyz;
-            __player.SetComponentData(translation);*/
-
-            if (__frameIDs == null)
-                __frameIDs = new Dictionary<object, ulong>();
-
-            if (!__frameIDs.TryGetValue(__player, out ulong sourceFrameID))
-                sourceFrameID = 0;
-
-            ulong destinationFrameID = info.frameId;
-            if (destinationFrameID == sourceFrameID)
-                __player.AppendBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
-            else
+            if (__tracks.Count > 0)
             {
-                __player.SetBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
+                if (__frameIDs == null)
+                    __frameIDs = new Dictionary<object, ulong>();
 
-                __frameIDs[__player] = destinationFrameID;
+                if (!__frameIDs.TryGetValue(__player, out ulong sourceFrameID))
+                    sourceFrameID = 0;
+
+                ulong destinationFrameID = info.frameId;
+                if (destinationFrameID == sourceFrameID || sourceFrameID == 0)
+                    __player.AppendBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
+                else
+                {
+                    __player.SetBuffer<MeshInstanceClipTrack, List<MeshInstanceClipTrack>>(__tracks);
+
+                    __frameIDs[__player] = destinationFrameID;
+                }
             }
-            //__player.SetComponentEnabled<MeshInstanceAnimatorControllerClipCommand>(true);
+            else 
+            {
+                if(__frameIDs != null && __frameIDs.TryGetValue(__player, out ulong sourceFrameID) && sourceFrameID != info.frameId)
+                {
+                    __frameIDs.Remove(sourceFrameID);
+                    
+                    __player.RemoveComponent<MeshInstanceClipTrack>();
+                }
+            }
         }
     }
 }

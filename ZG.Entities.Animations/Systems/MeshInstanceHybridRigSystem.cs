@@ -38,7 +38,7 @@ namespace ZG
         public Entity entity;
     }
 
-    [UpdateInGroup(typeof(MeshInstanceSystemGroup)), UpdateAfter(typeof(MeshInstanceRigSystem))]
+    [BurstCompile, UpdateInGroup(typeof(MeshInstanceSystemGroup)), UpdateAfter(typeof(MeshInstanceRigSystem))]
     public partial struct MeshInstanceHybridRigSystem : ISystem
     {
         private struct Result
